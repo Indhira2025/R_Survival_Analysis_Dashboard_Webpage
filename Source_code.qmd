@@ -67,13 +67,13 @@ clinical_sample[clinical_sample$PATIENT_ID == "P-0002880",]
 
 clinical_sample[clinical_sample$SAMPLE_TYPE == "Primary", ]
 
-library(dplyr)
+### Viewing multiple samples per patient
 
 sample_counts <- clinical_sample %>%
   count(PATIENT_ID, name = "n_samples")
 
 sample_counts[sample_counts$n_samples == 2,]
-View(sample_counts)
+#View(sample_counts)
 
 ```
 
@@ -115,7 +115,7 @@ n_distinct(non_met_baseline$PATIENT_ID)
 ```
 
 ```{r}
-library(kableExtra)
+
 
 timeline_progress <-  read.delim("msk_chord_2024_data/data_timeline_progression.txt"
                                 , header = TRUE, 
@@ -216,6 +216,9 @@ names(analysis_df)
 
 ```{r}
 
+### TMB Block
+
+
 ### Primary sample = baseline sequencing
 ## Filter only primary sample type in clinical_sample
 
@@ -254,6 +257,7 @@ length(unique(tmb_df$PATIENT_ID))
 
 
 ```
+
 ```{r}
 ### Mutations dataset
 
@@ -335,11 +339,83 @@ names(mutation_matrix)
 
 ```
 
+```{r}
+### Mutations Block
+
+mutations <- read.delim("msk_chord_2024_data/data_mutations.txt", 
+                   header = TRUE, 
+                   sep = "\t", 
+                   stringsAsFactors = FALSE)
+View(mutations)
+names(mutations)
+unique(mutations$Variant_Classification)
+mutations[mutations$Tumor_Sample_Barcode == "P-0000012-T03-IM3",]
+mutations[mutations$Tumor_Sample_Barcode == "P-0000012-T02-IM3",]
+
+## Mapping tumor barcode sample ID to patient ID byTumor_Sample_Barcode
+
+mutations_clini_merged <- mutations %>%
+  left_join(clinical_sample %>% select(Tumor_Sample_Barcode = SAMPLE_ID, PATIENT_ID, SAMPLE_TYPE ),
+            by = "Tumor_Sample_Barcode")%>%
+  filter(Tumor_Sample_Barcode %in% baseline_tmb$SAMPLE_ID) # only keep tumor sample sampled from primary tumor
+unique(mutations_clini_merged$SAMPLE_TYPE) ## check haiving only primary tumor type
+length(unique(mutations_clini_merged$Tumor_Sample_Barcode))
+
+length(unique(mutations_clini_merged$Hugo_Symbol)) 
+names(mutations_clini_merged)
+nrow ((mutations_clini_merged)) 
 
 
+# Filter mutations for eligible patients
+mutations_eligible <- mutations_clini_merged %>%
+  filter(PATIENT_ID %in% ttm_data$PATIENT_ID)
+nrow(mutations_eligible)
 
 
+## keep mutations that change the protein sequence - nonsynonymous mutations
+nonsynonymous_classes <- c(
+  "Missense_Mutation",
+  "Nonsense_Mutation",
+  "Frame_Shift_Del",
+  "Frame_Shift_Ins",
+  "frameshift_insertion",
+  "In_Frame_Del",
+  "In_Frame_Ins",
+  "Splice_Site",
+  "Translation_Start_Site",
+  "Nonstop_Mutation",
+  "nonsynonymous_SNV"
+)
 
+
+mutations_eligible_ns <- mutations_eligible %>%
+  filter(Variant_Classification %in% nonsynonymous_classes)
+
+mutations_eligible_ns
+
+  
+# selecting top 50 mutated genes
+top_genes <- mutations_eligible_ns %>%
+  count(Hugo_Symbol, sort = TRUE) %>%
+  slice_head(n = 50) %>%
+  pull(Hugo_Symbol)
+top_genes
+
+### Created a Binary Matrix
+mutation_matrix <- mutations_eligible_ns %>%
+  filter(Hugo_Symbol %in% top_genes) %>%
+  distinct(PATIENT_ID, Hugo_Symbol ) %>% #one row per PATIENT_ID.
+  mutate(value = 1) %>%
+  pivot_wider(
+    names_from = Hugo_Symbol,
+    values_from = value,
+    values_fill = 0
+  )
+#View(mutation_matrix)
+nrow(mutation_matrix)
+names(mutation_matrix)
+
+```
 
 ```{r}
 
