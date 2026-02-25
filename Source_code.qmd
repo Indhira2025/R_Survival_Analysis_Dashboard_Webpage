@@ -55,10 +55,26 @@ View(clinical_sample)
 kable(table(clinical_sample$CANCER_TYPE))
 names (clinical_sample)
 
+length(unique(clinical_sample$PATIENT_ID))
+nrow(clinical_sample)
+
 #typeof(clinical_sample)
 table(clinical_sample$SAMPLE_TYPE)
-#str(clinical_sample)
-clinical_sample[clinical_sample$PATIENT_ID == "P-0000041",]
+str(clinical_sample)
+clinical_sample[clinical_sample$PATIENT_ID == "P-0000012",]
+clinical_sample[clinical_sample$PATIENT_ID == "P-0000825",]
+clinical_sample[clinical_sample$PATIENT_ID == "P-0002880",]
+
+clinical_sample[clinical_sample$SAMPLE_TYPE == "Primary", ]
+
+library(dplyr)
+
+sample_counts <- clinical_sample %>%
+  count(PATIENT_ID, name = "n_samples")
+
+sample_counts[sample_counts$n_samples == 2,]
+View(sample_counts)
+
 ```
 
 names(timeline_diag)
@@ -69,7 +85,7 @@ timeline_diag <-  read.delim2("msk_chord_2024_data/data_timeline_diagnosis.txt",
                    sep = "\t", 
                    stringsAsFactors = FALSE)
 View(timeline_diag)
-#unique(timeline_diag$SUBTYPE)
+unique(timeline_diag$SUBTYPE)
 names(timeline_diag)
 #unique(timeline_diag$STAGE_CDM_DERIVED)
 #unique(timeline_diag$SUMMARY)
@@ -93,6 +109,9 @@ non_met_baseline <- timeline_diag %>%
 
 n_distinct(non_met_baseline$PATIENT_ID)
 
+
+
+
 ```
 
 ```{r}
@@ -106,6 +125,8 @@ View(timeline_progress)
 #names(timeline_progress)
 #str(timeline_progress)
 table(timeline_progress$PROGRESSION)
+
+
 
 
 # patients who cannot be included in a time-to-metastasis analysis because they 
@@ -126,6 +147,7 @@ eligible_patients <- clinical_features %>%
   # remove anyone who had metastasis recorded pre-baseline
 
 
+
 # Extracting post-baseline metastasis events
 
 met_events <- timeline_progress %>%
@@ -135,7 +157,18 @@ met_events <- timeline_progress %>%
   summarise(first_met_day = min(START_DATE),
             .groups = "drop")
 #View(met_events)
+new <- timeline_progress %>%
+  filter(START_DATE > 0,
+         PROGRESSION == "Y") %>%
+  group_by(PATIENT_ID)
+  
 
+#Extracting Baseline(sequencing time)
+start_time <- timeline_diag %>%
+  filter(PATIENT_ID %in% met_events$PATIENT_ID)%>%
+  select(PATIENT_ID, START_DATE)
+  
+View(start_time)
 
 # Extarcting  last follow-up time
 last_followup <- timeline_progress %>%
@@ -148,6 +181,7 @@ last_followup <- timeline_progress %>%
 #=========================================================================
 ## Time to metastasis event
 ttm_data <- eligible_patients %>%
+  left_join(start_time, by ="PATIENT_ID" )%>%
   left_join(met_events, by = "PATIENT_ID") %>%
   left_join(last_followup, by = "PATIENT_ID") %>%
   mutate(
@@ -162,52 +196,98 @@ ttm_data <- eligible_patients %>%
 View(ttm_data)
 summary(ttm_data$time)
 kable(table(ttm_data$event))
-ttm_data
+names(ttm_data)
+
 sum(ttm_data$time ==  0)
 
 #===============================================================================
 
-analysis_df <- ttm_data
+analysis_df <- ttm_data %>%
+select(PATIENT_ID,START_DATE,first_met_day,last_day, time, event)
 
+## START_DATE = Sequencing day
+## first_met_day == first metastasis event
+## last_day = last_day_followup
+## event = metastasis 1/0
+## time = if metastasis =1 then time = first_met_day; metastasis =0 then time = last_day_followup
+head(analysis_df)
 names(analysis_df)
 ```
 
 ```{r}
 
+### Primary sample = baseline sequencing
+## Filter only primary sample type in clinical_sample
+
+baseline_tmb_check <- clinical_sample %>%
+  filter(SAMPLE_TYPE == "Primary")%>%
+  select(SAMPLE_ID,PATIENT_ID, SAMPLE_TYPE,  PRIMARY_SITE ,TMB_NONSYNONYMOUS)
+## Patients with 2 primary tumors
+baseline_tmb_check[baseline_tmb_check$PATIENT_ID == "P-0002880",]
+baseline_tmb_check[baseline_tmb_check$PATIENT_ID == "P-0004121",]
+baseline_tmb_check[baseline_tmb_check$PATIENT_ID == "P-0005813",]
+
+## patient with 1 primary and 1 metastaic tumor sampled
+
+clinical_sample[clinical_sample$PATIENT_ID== "P-0000012",]
+
+### tmb df = ## Filter only primary sample type in clinical_sample
+## if there are 2 primary tumor samples pull the first sampled tumor's tmb
+
+baseline_tmb <- clinical_sample %>%
+  filter(SAMPLE_TYPE == "Primary") %>%
+  group_by(PATIENT_ID)%>%
+  slice_head(n = 1) %>% #pull the first sampled tumor's tmb
+  ungroup() %>%
+  select(SAMPLE_ID, PATIENT_ID, TMB_NONSYNONYMOUS)
+
+tmb_df <- baseline_tmb  %>%
+  filter(PATIENT_ID %in% ttm_data$PATIENT_ID)
+  
+nrow(tmb_df)
+length(tmb_df$PATIENT_ID)
+length(unique(tmb_df$PATIENT_ID))
+
+
+
+
+
+
+```
+```{r}
 ### Mutations dataset
 
 mutations <- read.delim("msk_chord_2024_data/data_mutations.txt", 
                    header = TRUE, 
                    sep = "\t", 
                    stringsAsFactors = FALSE)
-#View(mutations)
+View(mutations)
 names(mutations)
 unique(mutations$Variant_Classification)
-
-## keep mutations that change the protein sequence - nonsynonymous mutations
-
-
-tmb_df <- clinical_sample %>%
-  filter(PATIENT_ID %in% ttm_data$PATIENT_ID)
-tmb_patient <- tmb_df %>%
-  group_by(PATIENT_ID) %>%
-  summarise(max_TMB = max(TMB_NONSYNONYMOUS, na.rm = TRUE),
-            .groups = "drop")
-nrow(tmb_patient)
-length(tmb_patient$PATIENT_ID)
-length(unique(tmb_patient$PATIENT_ID))
+mutations[mutations$Tumor_Sample_Barcode == "P-0000012-T03-IM3",]
+mutations[mutations$Tumor_Sample_Barcode == "P-0000012-T02-IM3",]
 
 ## Mapping tumor barcode sample ID to patient ID byTumor_Sample_Barcode
+
 mutations_clini_merged <- mutations %>%
-  left_join(clinical_sample %>% select(Tumor_Sample_Barcode = SAMPLE_ID, PATIENT_ID ),
-            by = "Tumor_Sample_Barcode")
+  left_join(clinical_sample %>% select(Tumor_Sample_Barcode = SAMPLE_ID, PATIENT_ID, SAMPLE_TYPE ),
+            by = "Tumor_Sample_Barcode")%>%
+  filter(Tumor_Sample_Barcode %in% baseline_tmb$SAMPLE_ID) # only keep tumor sample sampled from primary tumor
+unique(mutations_clini_merged$SAMPLE_TYPE) ## check haiving only primary tumor type
+length(unique(mutations_clini_merged$Tumor_Sample_Barcode))
+
+length(unique(mutations_clini_merged$Hugo_Symbol)) 
 names(mutations_clini_merged)
+nrow ((mutations_clini_merged)) 
+
 
 # Filter mutations for eligible patients
 mutations_eligible <- mutations_clini_merged %>%
   filter(PATIENT_ID %in% ttm_data$PATIENT_ID)
+nrow(mutations_eligible)
 
 
+## keep mutations that change the protein sequence - nonsynonymous mutations
 nonsynonymous_classes <- c(
   "Missense_Mutation",
   "Nonsense_Mutation",
@@ -229,10 +309,10 @@ mutations_eligible_ns <- mutations_eligible %>%
 mutations_eligible_ns
 
   
-# selecting top 20 mutated genes
+# selecting top 50 mutated genes
 top_genes <- mutations_eligible_ns %>%
   count(Hugo_Symbol, sort = TRUE) %>%
-  slice_head(n = 20) %>%
+  slice_head(n = 50) %>%
   pull(Hugo_Symbol)
 top_genes
 
@@ -254,6 +334,12 @@ names(mutation_matrix)
 
 
 ```
+
+
+
+
+
+
 
 ```{r}
 
@@ -283,7 +369,8 @@ cna_seg_mapped <- cna_seg %>%
 
 # Filter mutations for eligible patients
 cna_eligible <- cna_seg_mapped %>%
-  filter(PATIENT_ID %in% ttm_data$PATIENT_ID)
+  filter(ID %in% baseline_tmb$SAMPLE_ID)%>% # pimary cna load
+  filter(PATIENT_ID %in% ttm_data$PATIENT_ID) # filtering eligible patients
 
 
 ## Global cna burden
@@ -300,17 +387,10 @@ cna_burden <- cna_eligible %>%
     global_cna_burden = altered_length / total_length,
     .groups = "drop")
 
-#CNA: global burden per patient (take max per patient)
+nrow(cna_burden)
+length(unique(cna_burden$PATIENT_ID))
+length(unique(cna_burden$ID))
 
-cna_patient <- cna_burden %>%
-  group_by(PATIENT_ID) %>%
-  summarise(global_cna_burden = max(global_cna_burden, na.rm = TRUE),
-            .groups = "drop")
-
-
-nrow(cna_patient)
-length(cna_patient$PATIENT_ID)
-length(unique(cna_patient$PATIENT_ID))
 ```
 
 ```{r}
@@ -321,7 +401,8 @@ sv <- read.delim("msk_chord_2024_data/data_sv.txt",
 View(sv)
 names(sv)
 str(sv)
-
+length(unique(sv$Site1_Hugo_Symbol))
+data.table(sv)[, .N, by = .(Site1_Hugo_Symbol, Site2_Hugo_Symbol, Class)][order(-N), ]
 library(dplyr)
 library(tidyr)
 library(data.table)
@@ -415,11 +496,20 @@ rsf_data <- patient_features %>%
 # Fit RSF
 set.seed(123)
 
+rsf_model_main <- rfsrc(
+  Surv(time, event) ~ .,
+  data = rsf_data,
+  ntree = 1000,
+  importance = TRUE
+)
+rsf_model_main$err.rate
+plot(rsf_model_main)  # RSF knows how to handle NAs in err.rate
+
 rsf_model <- rfsrc(
   Surv(time, event) ~ .,
   data = rsf_data,
   ntree = 1000,
-  proximity = TRUE
+  proximity = "oob"
 )
 
 prox_matrix <- rsf_model$proximity
@@ -490,6 +580,7 @@ legend("bottomleft",
 survdiff(Surv(time, event) ~ cluster,
          data = patient_features)
 ```
+
 ```{r}
 
 ### Patient_clusters 
@@ -501,24 +592,30 @@ kable(patient_clusters)
 
 ```
 
+```{r}
+### Patient_clusters 
+patient_clusters <- patient_features %>%
+  group_by(cluster) %>%
+  summarise(across(where(is.numeric), mean))
+
+kable(patient_clusters)
+```
+
 Cluster 5 likely represents:
 
 KRAS + TP53 + SMAD4 co-altered aggressive phenotype
 
 This pattern is typical of very unstable tumors.
 
-Genomically unstable
-Strong oncogenic signaling
-High metastatic potential
-
+Genomically unstable Strong oncogenic signaling High metastatic potential
 
 # RSF clustering has separated:
 
-cluster5:  TP53+KRAS+SMAD4 aggressive subtype
+cluster5: TP53+KRAS+SMAD4 aggressive subtype
 
 cluster 6: TP53+KRAS-only subtype
 
-cluster3 :  TP53-only subtype
+cluster3 : TP53-only subtype
 
 cluster4 : KRAS-only subtype
 
@@ -528,52 +625,20 @@ cluster 1: Intermediate complex subtype
 
 This is biologically meaningful.
 
-This is not random clustering.
-This reflects oncogenic architecture.
-
+This is not random clustering. This reflects oncogenic architecture.
 
 # References
-1. Kawaguchi et al. (2019)
-Kawaguchi, Y., Kopetz, S., Newhook, T. E., Morris, V. K., Overman, M. J., Frankel, W. L., … & Eng, C. (2019). Mutation status of RAS, TP53, and SMAD4 is superior to RAS alone for predicting prognosis after resection of colorectal liver metastases. Clinical Cancer Research, 25(19), 5843–5851. https://doi.org/10.1158/1078-0432.CCR-19-1293
 
-2. Wang et al. (2022)
-Wang, C., Sandhu, J., Tsao, A., & Fakih, M. (2022). Presence of concurrent TP53 mutations is necessary to predict poor outcomes within the SMAD4 mutated subgroup of metastatic colorectal cancer. Cancers, 14(15), 3644. https://doi.org/10.3390/cancers14153644
+1.  Kawaguchi et al. (2019) Kawaguchi, Y., Kopetz, S., Newhook, T. E., Morris, V. K., Overman, M. J., Frankel, W. L., … & Eng, C. (2019). Mutation status of RAS, TP53, and SMAD4 is superior to RAS alone for predicting prognosis after resection of colorectal liver metastases. Clinical Cancer Research, 25(19), 5843–5851. https://doi.org/10.1158/1078-0432.CCR-19-1293
 
-3. Gu et al. (2020)
-Gu, Y., Ji, Y., Jiang, H., & Qiu, G. (2020). Clinical effect of driver mutations of KRAS, CDKN2A/P16, TP53, and SMAD4 in pancreatic cancer: A meta-analysis. Genetic Testing and Molecular Biomarkers, 24(12), 777–788. https://doi.org/10.1089/gtmb.2020.0086
+2.  Wang et al. (2022) Wang, C., Sandhu, J., Tsao, A., & Fakih, M. (2022). Presence of concurrent TP53 mutations is necessary to predict poor outcomes within the SMAD4 mutated subgroup of metastatic colorectal cancer. Cancers, 14(15), 3644. https://doi.org/10.3390/cancers14153644
 
-4. (Mechanistic Support) Nature Communications study (2021)
-Zhang, X., Li, C., Wang, L., Ren, M., Yang, Z., Xu, Y., … & Wang, J. (2021). Loss of Smad4 promotes aggressive lung cancer metastasis in KRAS/p53 mutant mice. Nature Communications, 12, 4576. https://doi.org/10.1038/s41467-021-24898-9
+3.  Gu et al. (2020) Gu, Y., Ji, Y., Jiang, H., & Qiu, G. (2020). Clinical effect of driver mutations of KRAS, CDKN2A/P16, TP53, and SMAD4 in pancreatic cancer: A meta-analysis. Genetic Testing and Molecular Biomarkers, 24(12), 777–788. https://doi.org/10.1089/gtmb.2020.0086
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+4.  (Mechanistic Support) Nature Communications study (2021) Zhang, X., Li, C., Wang, L., Ren, M., Yang, Z., Xu, Y., … & Wang, J. (2021). Loss of Smad4 promotes aggressive lung cancer metastasis in KRAS/p53 mutant mice. Nature Communications, 12, 4576. https://doi.org/10.1038/s41467-021-24898-9
 
 # Methods
+
 ### shorter:
 
 We trained a Random Survival Forest (RSF) using patient-level genomic features—including nonsynonymous mutations, structural variant counts, and global copy number alteration burden—as predictors, with time-to-metastasis and event status as the outcome. The forest was grown with 1,000 trees, and out-of-bag (OOB) samples were used to obtain unbiased error estimates and to compute a patient-level proximity matrix reflecting survival-relevant similarity. The proximity matrix was converted to a distance matrix and used for hierarchical clustering, with the optimal number of clusters determined by silhouette width and stability analysis. Resulting clusters were interpreted as genomic phenotypes informed by shared survival-associated patterns.
@@ -598,10 +663,7 @@ OOB error rates from the RSF were monitored to ensure sufficient forest size and
 
 ### Interpretation:
 
--   Extremely large chi-square statistic
-p-value essentially 0
-Strong evidence that survival differs across clusters
- RSF-derived clusters are **survival-informative**.
+-   Extremely large chi-square statistic p-value essentially 0 Strong evidence that survival differs across clusters RSF-derived clusters are **survival-informative**.
 
 ```{r}
 gene_panel <- read.table("msk_chord_2024_data/data_gene_panel_matrix.txt", 
@@ -632,6 +694,28 @@ View(TumorSites)
 head(TumorSites)
 names(TumorSites)
 TumorSites[TumorSites$PATIENT_ID == "P-0000012",]
+TumorSites[TumorSites$PATIENT_ID == "P-0000825",]
+TumorSites[TumorSites$PATIENT_ID == "P-0002880",]
+unique(TumorSites$TUMOR_SITE)
+
+
+clinical_sample[clinical_sample$PATIENT_ID == "P-0000012",]
+clinical_sample[clinical_sample$PATIENT_ID == "P-0000825",]
+clinical_sample[clinical_sample$PATIENT_ID == "P-0002880",]
+
+
+baseline_diag <- TumorSites %>%
+  filter(START_DATE <= 0) %>%
+  group_by(PATIENT_ID) %>%
+  slice_max(START_DATE, with_ties = FALSE) %>% # selects the diagnosis stage closest to the time of sequencing
+  select(PATIENT_ID, baseline_diag_date = START_DATE)
+
+sample_patient_map <- clinical_sample %>%
+  select(SAMPLE_ID, PATIENT_ID,TMB_NONSYNONYMOUS )
+
+sample_diag <- sample_patient_map %>%
+  left_join(baseline_diag, by = "PATIENT_ID")
+  
 ```
 
 ```{r}
