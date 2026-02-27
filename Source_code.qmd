@@ -51,7 +51,7 @@ clinical_features
 
 library(kableExtra)
 clinical_sample <- read.delim("msk_chord_2024_data/data_clinical_sample.txt", comment.char="#")
-View(clinical_sample)
+#View(clinical_sample)
 kable(table(clinical_sample$CANCER_TYPE))
 names (clinical_sample)
 
@@ -84,16 +84,23 @@ timeline_diag <-  read.delim2("msk_chord_2024_data/data_timeline_diagnosis.txt",
                    header = TRUE, 
                    sep = "\t", 
                    stringsAsFactors = FALSE)
-View(timeline_diag)
+#View(timeline_diag)
 unique(timeline_diag$SUBTYPE)
 names(timeline_diag)
 #unique(timeline_diag$STAGE_CDM_DERIVED)
 #unique(timeline_diag$SUMMARY)
 #str(timeline_diag)
 
-## 
-timeline_diag$SUMMARY <- trimws(timeline_diag$SUMMARY)
+#If timeline_diag$START_DATE > 0 represents new primary diagnosis after sequencing, then:
+#That is clinical information evolving over time —
+#but it does NOT affect your survival baseline definition.
 
+timeline_diag %>%
+  filter(START_DATE > 0)
+
+## checking
+timeline_diag$SUMMARY <- trimws(timeline_diag$SUMMARY)
+timeline_diag[timeline_diag$PATIENT_ID == "P-0000612", ]
 
 ## Determine Baseline Stage at Sequencing & Remove Patients Metastatic at Baseline
 non_met_baseline <- timeline_diag %>%
@@ -105,9 +112,26 @@ non_met_baseline <- timeline_diag %>%
 #View(baseline_stage)  
 #unique(baseline_stage$SUMMARY)
 
+nrow(non_met_baseline)
+
 #at-risk cohort
 
 n_distinct(non_met_baseline$PATIENT_ID)
+
+timeline_diag  %>%
+  group_by(PATIENT_ID) %>%
+  summarise(n_start_dates = n_distinct(START_DATE)) %>%
+  filter(n_start_dates > 1)
+
+
+patients_with_2 <-timeline_diag %>%
+  group_by(PATIENT_ID) %>%
+  summarise(n_start = n_distinct(START_DATE)) %>%
+  filter(n_start == 2)
+
+timeline_diag  %>%
+  filter(PATIENT_ID %in% patients_with_2$PATIENT_ID) %>%
+  arrange(PATIENT_ID, START_DATE)
 
 
 
@@ -121,12 +145,12 @@ timeline_progress <-  read.delim("msk_chord_2024_data/data_timeline_progression.
                                 , header = TRUE, 
                                 sep = "\t", 
                                 stringsAsFactors = FALSE)
-View(timeline_progress)
+#View(timeline_progress)
 #names(timeline_progress)
 #str(timeline_progress)
 table(timeline_progress$PROGRESSION)
 
-
+timeline_progress[timeline_progress$PATIENT_ID == "P-0003974", ]
 
 
 # patients who cannot be included in a time-to-metastasis analysis because they 
@@ -146,7 +170,7 @@ eligible_patients <- clinical_features %>%
   filter(!PATIENT_ID %in% pre_baseline_met$PATIENT_ID)      
   # remove anyone who had metastasis recorded pre-baseline
 
-
+nrow(eligible_patients)
 
 # Extracting post-baseline metastasis events
 
@@ -157,18 +181,25 @@ met_events <- timeline_progress %>%
   summarise(first_met_day = min(START_DATE),
             .groups = "drop")
 #View(met_events)
-new <- timeline_progress %>%
-  filter(START_DATE > 0,
-         PROGRESSION == "Y") %>%
-  group_by(PATIENT_ID)
-  
+nrow(met_events)
+
 
 #Extracting Baseline(sequencing time)
 start_time <- timeline_diag %>%
-  filter(PATIENT_ID %in% met_events$PATIENT_ID)%>%
-  select(PATIENT_ID, START_DATE)
+  #filter(PATIENT_ID %in% met_events$PATIENT_ID)%>%
+  select(PATIENT_ID, START_DATE) %>%
+  group_by(PATIENT_ID) %>%
+  slice_max(START_DATE, with_ties = FALSE)
+start_time[start_time$PATIENT_ID == "P-0000612", ]
+
+#View(start_time)
+nrow(start_time)
+n_distinct(start_time$PATIENT_ID)
+start_time[start_time$START_DATE == 0,]
+start_time[start_time$PATIENT_ID ==  "P-0003523" , ]
+
+
   
-View(start_time)
 
 # Extarcting  last follow-up time
 last_followup <- timeline_progress %>%
@@ -193,13 +224,15 @@ ttm_data <- eligible_patients %>%
   filter(!is.na(time),
         time > 0)   #The latest recorded event for this patient happened before                        #sequencing. we have no post-sequencing follow-up data.
                       #This patient cannot contribute meaningful survival info
-View(ttm_data)
+#View(ttm_data)
 summary(ttm_data$time)
 kable(table(ttm_data$event))
 names(ttm_data)
 
 sum(ttm_data$time ==  0)
-
+nrow(ttm_data)
+n_distinct(ttm_data$PATIENT_ID)
+ttm_data[ttm_data$PATIENT_ID == "P-0000612", ]
 #===============================================================================
 
 analysis_df <- ttm_data %>%
@@ -212,6 +245,8 @@ select(PATIENT_ID,START_DATE,first_met_day,last_day, time, event)
 ## time = if metastasis =1 then time = first_met_day; metastasis =0 then time = last_day_followup
 head(analysis_df)
 names(analysis_df)
+nrow(analysis_df)
+n_distinct(analysis_df$PATIENT_ID)
 ```
 
 ```{r}
@@ -252,87 +287,6 @@ length(tmb_df$PATIENT_ID)
 length(unique(tmb_df$PATIENT_ID))
 
 
-
-
-
-
-```
-
-```{r}
-### Mutations dataset
-
-mutations <- read.delim("msk_chord_2024_data/data_mutations.txt", 
-                   header = TRUE, 
-                   sep = "\t", 
-                   stringsAsFactors = FALSE)
-View(mutations)
-names(mutations)
-unique(mutations$Variant_Classification)
-mutations[mutations$Tumor_Sample_Barcode == "P-0000012-T03-IM3",]
-mutations[mutations$Tumor_Sample_Barcode == "P-0000012-T02-IM3",]
-
-## Mapping tumor barcode sample ID to patient ID byTumor_Sample_Barcode
-
-mutations_clini_merged <- mutations %>%
-  left_join(clinical_sample %>% select(Tumor_Sample_Barcode = SAMPLE_ID, PATIENT_ID, SAMPLE_TYPE ),
-            by = "Tumor_Sample_Barcode")%>%
-  filter(Tumor_Sample_Barcode %in% baseline_tmb$SAMPLE_ID) # only keep tumor sample sampled from primary tumor
-unique(mutations_clini_merged$SAMPLE_TYPE) ## check haiving only primary tumor type
-length(unique(mutations_clini_merged$Tumor_Sample_Barcode))
-
-length(unique(mutations_clini_merged$Hugo_Symbol)) 
-names(mutations_clini_merged)
-nrow ((mutations_clini_merged)) 
-
-
-# Filter mutations for eligible patients
-mutations_eligible <- mutations_clini_merged %>%
-  filter(PATIENT_ID %in% ttm_data$PATIENT_ID)
-nrow(mutations_eligible)
-
-
-## keep mutations that change the protein sequence - nonsynonymous mutations
-nonsynonymous_classes <- c(
-  "Missense_Mutation",
-  "Nonsense_Mutation",
-  "Frame_Shift_Del",
-  "Frame_Shift_Ins",
-  "frameshift_insertion",
-  "In_Frame_Del",
-  "In_Frame_Ins",
-  "Splice_Site",
-  "Translation_Start_Site",
-  "Nonstop_Mutation",
-  "nonsynonymous_SNV"
-)
-
-
-mutations_eligible_ns <- mutations_eligible %>%
-  filter(Variant_Classification %in% nonsynonymous_classes)
-
-mutations_eligible_ns
-
-  
-# selecting top 50 mutated genes
-top_genes <- mutations_eligible_ns %>%
-  count(Hugo_Symbol, sort = TRUE) %>%
-  slice_head(n = 50) %>%
-  pull(Hugo_Symbol)
-top_genes
-
-### Created a Binary Matrix
-mutation_matrix <- mutations_eligible_ns %>%
-  filter(Hugo_Symbol %in% top_genes) %>%
-  distinct(PATIENT_ID, Hugo_Symbol ) %>% #one row per PATIENT_ID.
-  mutate(value = 1) %>%
-  pivot_wider(
-    names_from = Hugo_Symbol,
-    values_from = value,
-    values_fill = 0
-  )
-#View(mutation_matrix)
-nrow(mutation_matrix)
-names(mutation_matrix)
 
 
 
@@ -426,7 +380,7 @@ cna <- read.table("msk_chord_2024_data/data_cna.txt",
                    sep = "\t", 
                    stringsAsFactors = FALSE)
 #View(cna)
-names(cna)
+#names(cna)
 
 
 
@@ -462,6 +416,9 @@ cna_burden <- cna_eligible %>%
     altered_length = sum(segment_length[altered]),
     global_cna_burden = altered_length / total_length,
     .groups = "drop")
+
+cna_patients <- cna_burden %>%
+  select (PATIENT_ID, global_cna_burden)
 
 nrow(cna_burden)
 length(unique(cna_burden$PATIENT_ID))
@@ -527,47 +484,162 @@ nrow(sv_total_count_matrix)
 
 ```{r}
 
-### Merging ttm data + clinical + Demographic + genomic features of eligible patients
+###  genomic features by patient ID
 
-patient_features <- analysis_df %>%
-  select(PATIENT_ID, time, event)%>%
+genomic_features <- analysis_df %>%
+  select(PATIENT_ID,START_DATE,time, event )%>%
   left_join(mutation_matrix, by = "PATIENT_ID") %>%
-  left_join(tmb_patient, by = "PATIENT_ID") %>%
-  left_join(cna_patient, by = "PATIENT_ID") %>%
-  left_join(sv_total_count_matrix, by = "PATIENT_ID")
-patient_features[is.na(patient_features)] <- 0
+  left_join(tmb_df, by = "PATIENT_ID") %>%
+  left_join(cna_patients, by = "PATIENT_ID") 
+genomic_features[is.na(genomic_features)] <- 0
 
 #View(analysis_df)
 
 kable(table(patient_features$event))
 
 ###==================Final table for RFS analysis=====================
-patient_features
+genomic_features
+names(genomic_features)
 
-nrow(patient_features)
+nrow(genomic_features)
 n_distinct(analysis_df$PATIENT_ID)
 patient_features[patient_features$time == 0,]
 
 ####======================================================================
-#View(patient_features)
+
+```
+```{r}
+
+library(survival)
+library(cluster)
+library(dplyr)
+
+
+#install.packages("LTRCforests")
+library(LTRCforests)
+
+set.seed(123)
+# Remove ID column for modeling
+rsf_data <- genomic_features %>%
+  select(-PATIENT_ID, -SAMPLE_ID) %>%
+  filter(START_DATE < time)
+
+rsf_data1 <- genomic_features %>%
+  select(-PATIENT_ID, -SAMPLE_ID) %>%
+  filter(START_DATE > time)
+
+View(genomic_features)
+nrow(rsf_data)
+nrow(genomic_features)
+nrow(rsf_data1)
+sum(is.na(genomic_features$START_DATE))
+sum(is.na(genomic_features$time))
+sum(is.na(genomic_features))
+
+# Make sure start <= stop
+sum(rsf_data$START_DATE >= rsf_data$time)
+
+# 1. Identify your target and predictor variables
+target_cols <- c("START_DATE", "time", "event")
+predictor_cols <- setdiff(names(rsf_data), target_cols)
+
+# 2. Create the formula string
+formula_str <- paste("Surv(START_DATE, time, event) ~", 
+                     paste(predictor_cols, collapse = " + "))
+
+# 3. Convert to a formal R formula object
+surv_formula <- as.formula(formula_str)
+
+
+print(nrow(rsf_data[rsf_data$time > rsf_data$START_DATE, ]))
+
+# 1. Is there any overlap between entry times and exit times?
+print(min(rsf_data$time))       # The earliest someone left
+print(max(rsf_data$START_DATE)) # The latest someone entered
+
+# 2. Check if the 'event' column is actually 0/1 numeric
+print(table(rsf_data$event))
+
+rsf_model <- ltrccf(formula = surv_formula, 
+                   data = rsf_data, 
+                   ntree = 1)
+
+
+
+# 1. Get terminal nodes for ALL trees
+# ltrccif supports standard predict() for nodes
+all_nodes <- predict(fit_cif, newdata = rsf_data, type = "node")
+
+# 2. Identify which rows were OOB for which trees
+# inbag == 0 means OOB
+oob_mask <- fit_cif$inbag == 0 
+
+# 3. Build the OOB Proximity Matrix
+n <- nrow(rsf_data)
+prox_oob <- matrix(0, n, n)
+count_oob <- matrix(0, n, n) # Normalizer
+
+for (i in 1:ncol(all_nodes)) {
+  oob_idx <- which(oob_mask[, i])
+  if(length(oob_idx) > 1) {
+    # Check which OOB pairs landed in the same node
+    nodes_i <- all_nodes[oob_idx, i]
+    same_node <- outer(nodes_i, nodes_i, "==")
+    
+    prox_oob[oob_idx, oob_idx] <- prox_oob[oob_idx, oob_idx] + same_node
+    count_oob[oob_idx, oob_idx] <- count_oob[oob_idx, oob_idx] + 1
+  }
+}
+
+# Normalize: 1 if always together, 0 if never
+prox_oob <- ifelse(count_oob > 0, prox_oob / count_oob, 0)
+diag(prox_oob) <- 1
+dist_matrix <- as.dist(1 - prox_oob)
+
+# 5️⃣ Hierarchical clustering
+hc <- hclust(dist_matrix, method = "ward.D2")
+plot(hc, main = "LTRC Random Forest-Based Clustering", xlab = "", sub = "")
+
+
+# 7️⃣ Optional: silhouette analysis to choose optimal k
+sil <- silhouette(clusters, dist_matrix)
+avg_sil <- mean(sil[, 3])
+cat("Average silhouette width:", avg_sil, "\n")
+
+# 8️⃣ Plot survival curves by cluster
+surv_obj <- Surv(rsf_data$START_DATE, rsf_data$time, rsf_data$event)
+fit_cluster <- survfit(surv_obj ~ cluster, data = rsf_data)
+
+ggsurvplot(
+  fit_cluster,
+  data = rsf_data,
+  risk.table = TRUE,
+  pval = TRUE,
+  palette = c("red", "blue", "green"),
+  title = "Survival Curves by Random Forest Cluster"
+)
+
+
+
+
+
 ```
 
 ```{r}
-### RSF Clustering
+### LTRC RSF Clustering
 
 #Create a survival object
 #install.packages("randomForestSRC")
 library(randomForestSRC)
 library(survival)
-surv_obj <- Surv(time = patient_features$time, # creates the correct structure                                                                              required 
-                 event = patient_features$event) # for RSF or cox regression
-
+surv_obj <- Surv(time = genomic_features$time, # creates the correct structure                                                                                             required 
+                 event = genomic_features$event) # for RSF 
 
 
 
 # Remove ID column for modeling
-rsf_data <- patient_features %>%
-  select(-PATIENT_ID)
+rsf_data <- genomic_features %>%
+  select(-PATIENT_ID, -SAMPLE_ID, -START_DATE)
 
 # Fit RSF
 set.seed(123)
@@ -580,6 +652,8 @@ rsf_model_main <- rfsrc(
 )
 rsf_model_main$err.rate
 plot(rsf_model_main)  # RSF knows how to handle NAs in err.rate
+
+### Main model
 
 rsf_model <- rfsrc(
   Surv(time, event) ~ .,
