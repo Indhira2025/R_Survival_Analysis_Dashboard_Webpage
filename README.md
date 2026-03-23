@@ -41,13 +41,22 @@ cBioPortal](https://www.cbioportal.org/study/summary?id=msk_chord_2024)
 Time to metastasis — interval from study entry (baseline) to first
 documented metastatic event.
 
-### Expected Impact
+## Results
+<img width="706" height="392" alt="image" src="https://github.com/user-attachments/assets/f19c7c0b-a32b-4463-b9cb-da7aac10637e" />
+<img width="713" height="444" alt="image" src="https://github.com/user-attachments/assets/8adfeba5-e0d6-4815-a588-ae7354018d86" />
+<img width="762" height="443" alt="image" src="https://github.com/user-attachments/assets/7fc97e32-9b1d-46a6-bf8a-89d1dab58451" />
 
--   Identify high-risk patient subtypes.
--   Quantify genomic heterogeneity effects on metastasis.
--   Integrate ML-based clustering with interpretable survival modeling
-    for precision oncology.
+In this study, Random Survival Forest (RSF) proximity clustering identified six distinct genomic patient subtypes, and dimensional visualization confirmed clear separation and structure among these clusters. Kaplan–Meier analysis demonstrated significant differences in metastasis-free survival across the clusters (log-rank p < 0.0001), indicating that these genomic subtypes are not only genetically distinct but also clinically meaningful. Several clusters exhibited unique prognostic patterns, highlighting biologically relevant heterogeneity in metastatic risk. For example, the PIK3CA-enriched cluster (Cluster 4) showed favorable metastasis-free survival, consistent with observations in breast and endometrial cancers8,10, while the TP53-dominant cluster (Cluster 5) reflected a genomic instability phenotype commonly observed across multiple tumor types10. Additionally, enrichment of APC and KRAS mutations in one cluster corresponds to canonical WNT and MAPK pathway activation reported in colorectal tumorigenesis 9-10. Interestingly, a genomically quiet yet clinically aggressive subtype (Cluster 2) was identified, a pattern previously described in prostate and pancreatic cancers11, suggesting that non-mutational mechanisms may drive metastatic progression. Collectively, these results underscore the potential of machine learning–based genomic clustering to stratify patients by risk and inform personalized prognostic assessment. 
 
+## Way forward:
+Future work should 
+- assess clusters by cancer type, 
+- quantify cluster-specific metastasis risk using Cox models, 
+- identify key genomic drivers via RSF variable importance,
+- validate findings in independent cohorts, 
+- investigate mechanisms underlying aggressive subtypes, and 
+- integrate clinical data to enhance risk stratification and support precision oncology
+- 
 ## MSK-CHORD Dashboard
 
 While the MSK-CHORD cohort is accessible through cBioPortal, this Shiny
