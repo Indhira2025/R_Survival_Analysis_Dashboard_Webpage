@@ -13,7 +13,7 @@ library(survival)
 #library(randomForestSRC)
 library(cluster)
 #library(survminer)
-library(caret)
+#library(caret)
 library(pROC)
 
 
@@ -35,7 +35,7 @@ typeof(clinical_patient)
 
 clinical_patient[clinical_patient$PATIENT_ID == "P-0001340",]
 clinical_features <- clinical_patient %>%
-  select(PATIENT_ID,
+  dplyr::select(PATIENT_ID,
          GENDER,
          RACE,
          ETHNICITY,
@@ -187,7 +187,7 @@ nrow(met_events)
 #Extracting Baseline(sequencing time)
 start_time <- timeline_diag %>%
   #filter(PATIENT_ID %in% met_events$PATIENT_ID)%>%
-  select(PATIENT_ID, START_DATE) %>%
+  dplyr::select(PATIENT_ID, START_DATE) %>%
   group_by(PATIENT_ID) %>%
   slice_max(START_DATE, with_ties = FALSE)
 start_time[start_time$PATIENT_ID == "P-0000612", ]
@@ -212,7 +212,7 @@ last_followup <- timeline_progress %>%
 #=========================================================================
 ## Time to metastasis event
 ttm_data <- eligible_patients %>%
-  left_join(start_time, by ="PATIENT_ID" )%>%
+  #left_join(start_time, by ="PATIENT_ID" )%>%
   left_join(met_events, by = "PATIENT_ID") %>%
   left_join(last_followup, by = "PATIENT_ID") %>%
   mutate(
@@ -236,7 +236,7 @@ ttm_data[ttm_data$PATIENT_ID == "P-0000612", ]
 #===============================================================================
 
 analysis_df <- ttm_data %>%
-select(PATIENT_ID,START_DATE,first_met_day,last_day, time, event)
+dplyr::select(PATIENT_ID,first_met_day,last_day, time, event)
 
 ## START_DATE = Sequencing day
 ## first_met_day == first metastasis event
@@ -259,7 +259,7 @@ n_distinct(analysis_df$PATIENT_ID)
 
 baseline_tmb_check <- clinical_sample %>%
   filter(SAMPLE_TYPE == "Primary")%>%
-  select(SAMPLE_ID,PATIENT_ID, SAMPLE_TYPE,  PRIMARY_SITE ,TMB_NONSYNONYMOUS)
+  dplyr::select(SAMPLE_ID,PATIENT_ID, SAMPLE_TYPE,  PRIMARY_SITE ,TMB_NONSYNONYMOUS)
 ## Patients with 2 primary tumors
 baseline_tmb_check[baseline_tmb_check$PATIENT_ID == "P-0002880",]
 baseline_tmb_check[baseline_tmb_check$PATIENT_ID == "P-0004121",]
@@ -277,7 +277,7 @@ baseline_tmb <- clinical_sample %>%
   group_by(PATIENT_ID)%>%
   slice_head(n = 1) %>% #pull the first sampled tumor's tmb
   ungroup() %>%
-  select(SAMPLE_ID, PATIENT_ID, TMB_NONSYNONYMOUS)
+  dplyr::select(SAMPLE_ID, PATIENT_ID, TMB_NONSYNONYMOUS)
 
 tmb_df <- baseline_tmb  %>%
   filter(PATIENT_ID %in% ttm_data$PATIENT_ID)
@@ -287,7 +287,7 @@ length(tmb_df$PATIENT_ID)
 length(unique(tmb_df$PATIENT_ID))
 
 
-
+baseline_tmb[baseline_tmb$PATIENT_ID == "P-0000066", ]
 
 
 
@@ -309,7 +309,7 @@ mutations[mutations$Tumor_Sample_Barcode == "P-0000012-T02-IM3",]
 ## Mapping tumor barcode sample ID to patient ID byTumor_Sample_Barcode
 
 mutations_clini_merged <- mutations %>%
-  left_join(clinical_sample %>% select(Tumor_Sample_Barcode = SAMPLE_ID, PATIENT_ID, SAMPLE_TYPE ),
+  left_join(clinical_sample %>% dplyr:: select(Tumor_Sample_Barcode = SAMPLE_ID, PATIENT_ID, SAMPLE_TYPE ),
             by = "Tumor_Sample_Barcode")%>%
   filter(Tumor_Sample_Barcode %in% baseline_tmb$SAMPLE_ID) # only keep tumor sample sampled from primary tumor
 unique(mutations_clini_merged$SAMPLE_TYPE) ## check haiving only primary tumor type
@@ -394,7 +394,7 @@ names(cna_seg)
 #Mapping ID to Patient ID
 cna_seg_mapped <- cna_seg %>%
   left_join(clinical_sample %>%
-              select(SAMPLE_ID, PATIENT_ID),
+              dplyr::select(SAMPLE_ID, PATIENT_ID),
             by = c("ID" = "SAMPLE_ID"))
 
 # Filter mutations for eligible patients
@@ -418,7 +418,7 @@ cna_burden <- cna_eligible %>%
     .groups = "drop")
 
 cna_patients <- cna_burden %>%
-  select (PATIENT_ID, global_cna_burden)
+  dplyr::select (PATIENT_ID, global_cna_burden)
 
 nrow(cna_burden)
 length(unique(cna_burden$PATIENT_ID))
@@ -487,7 +487,7 @@ nrow(sv_total_count_matrix)
 ###  genomic features by patient ID
 
 genomic_features <- analysis_df %>%
-  select(PATIENT_ID,START_DATE,time, event )%>%
+  dplyr::select(PATIENT_ID,time, event )%>%
   left_join(mutation_matrix, by = "PATIENT_ID") %>%
   left_join(tmb_df, by = "PATIENT_ID") %>%
   left_join(cna_patients, by = "PATIENT_ID") 
@@ -495,7 +495,7 @@ genomic_features[is.na(genomic_features)] <- 0
 
 #View(analysis_df)
 
-kable(table(patient_features$event))
+kable(table(genomic_features$event))
 
 ###==================Final table for RFS analysis=====================
 genomic_features
@@ -503,11 +503,12 @@ names(genomic_features)
 
 nrow(genomic_features)
 n_distinct(analysis_df$PATIENT_ID)
-patient_features[patient_features$time == 0,]
+genomic_features[genomic_features$time == 0,]
 
 ####======================================================================
 
 ```
+
 ```{r}
 
 library(survival)
@@ -626,7 +627,7 @@ ggsurvplot(
 ```
 
 ```{r}
-### LTRC RSF Clustering
+###  RSF Clustering
 
 #Create a survival object
 #install.packages("randomForestSRC")
@@ -639,19 +640,21 @@ surv_obj <- Surv(time = genomic_features$time, # creates the correct structure  
 
 # Remove ID column for modeling
 rsf_data <- genomic_features %>%
-  select(-PATIENT_ID, -SAMPLE_ID, -START_DATE)
-
+  dplyr::select(-PATIENT_ID, -SAMPLE_ID)
+nrow(rsf_data)
 # Fit RSF
 set.seed(123)
 
-rsf_model_main <- rfsrc(
-  Surv(time, event) ~ .,
-  data = rsf_data,
-  ntree = 1000,
-  importance = TRUE
-)
-rsf_model_main$err.rate
-plot(rsf_model_main)  # RSF knows how to handle NAs in err.rate
+#============================================================================
+#rsf_model_main <- rfsrc(
+  #Surv(time, event) ~ .,
+  #data = rsf_data,
+  #ntree = 1000,
+  #importance = TRUE
+#)
+#rsf_model_main$err.rate
+#plot(rsf_model_main)  # RSF knows how to handle NAs in err.rate
+#=============================================================================
 
 ### Main model
 
@@ -661,9 +664,12 @@ rsf_model <- rfsrc(
   ntree = 1000,
   proximity = "oob"
 )
+library(survival)
+
+
 
 prox_matrix <- rsf_model$proximity
-View(prox_matrix)
+#View(prox_matrix)
 dim(prox_matrix)
 
 # Create distance Matrix
@@ -695,13 +701,68 @@ optimal_k
 ```
 
 ```{r}
+# Load required packages
+library(survival)
+#install.packages("pec")
+library(pec)
+#install.packages("timeROC")
+library(timeROC)
+
+# --- 1. C-index (Concordance Index) ---
+c_index <- survConcordance(Surv(time, event) ~ rsf_model$predicted, data = rsf_data)$concordance
+cat("C-index (Concordance Index):", round(c_index, 3), "\n")
+
+# --- 2. Brier Score over time ---
+brier <- pec(
+  object = rsf_model,
+  formula = Surv(time, event) ~ 1,
+  data = rsf_data,
+  cens.model = "marginal"
+)
+
+# Plot Brier score
+plot(brier, main = "Brier Score over Time")
+# Optional: get Brier score at specific times
+brier_scores <- crps(brier)
+print("Integrated Brier score:")
+print(brier_scores)
+
+# --- 3. Time-Dependent AUC ---
+# Use predicted risk scores from RSF
+rsf_pred <- rsf_model$predicted
+
+# Define time points of interest (adjust as needed)
+time_points <- c(12, 24, 36) # e.g., months
+
+roc <- timeROC(
+  T = rsf_data$time,
+  delta = rsf_data$event,
+  marker = rsf_pred,
+  cause = 1,
+  times = time_points,
+  iid = TRUE
+)
+
+# Print AUC at each time point
+for (i in 1:length(time_points)) {
+  cat("Time-dependent AUC at", time_points[i], "months:", round(roc$AUC[i], 3), "\n")
+}
+```
+
+```{r}
+brier_scores <- crps(brier)
+print("Integrated Brier score:")
+print(brier_scores)
+```
+
+```{r}
 #Final Clustering (PAM)
 pam_final <- pam(dist_obj,
                  k = optimal_k,
                  diss = TRUE)
 
-patient_features$cluster <- factor(pam_final$clustering)
-#patient_features$cluster
+genomic_features$cluster <- factor(pam_final$clustering)
+
 
 ```
 
@@ -710,14 +771,14 @@ patient_features$cluster <- factor(pam_final$clustering)
 # Validate Survival Separation
 
 fit <- survfit(Surv(time, event) ~ cluster,
-               data = patient_features)
+               data = genomic_features)
 
 plot(fit, col = 1:optimal_k, lwd = 2,
      xlab = "Time",
      ylab = "MFS Probability")
 
 legend("bottomleft",
-       legend = levels(patient_features$cluster),
+       legend = levels(genomic_features$cluster),
        col = 1:optimal_k,
        lwd = 2)
 
@@ -728,18 +789,197 @@ legend("bottomleft",
 
 
 survdiff(Surv(time, event) ~ cluster,
-         data = patient_features)
+         data = genomic_features)
+
+
+install.packages("survminer")
+
+library(survminer)
+
+fit <- survfit(Surv(time, event) ~ cluster,
+               data = genomic_features)
+
+ggsurvplot(
+  fit,
+  data = genomic_features,
+  risk.table = TRUE,
+  pval = TRUE,
+  conf.int = TRUE,
+  palette = "Dark2",
+  xlab = "Days from Sequencing",
+  ylab = "Metastasis-Free Survival Probability",
+  legend.title = "Genomic Cluster"
+)
+
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+surv_table <- data.frame(
+  Cluster = 1:6,
+  N = c(5008, 1449, 401, 311, 362, 399),
+  Observed = c(2015, 946, 123, 70, 141, 234),
+  Expected = c(2329, 496, 199, 179, 161, 165),
+  O_minus_E_sq_over_E = c(42.25, 407.09, 28.76, 66.79, 2.49, 29.07),
+  O_minus_E_sq_over_V = c(124.47, 476.90, 30.51, 70.63, 2.61, 30.54)
+)
+
+surv_table %>%
+  kable("html", caption = "Log-rank Test Results by Cluster") %>%
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### **Survival Differences Across RSF-Derived Clusters**
+
+Kaplan–Meier survival analysis was performed to evaluate differences in metastasis-free survival (MFS) across the genomic clusters identified by the Random Survival Forest (RSF) clustering approach. The survival curves demonstrated **clear separation between clusters**, indicating distinct survival patterns among patient groups. A **log-rank test** was conducted to assess statistical significance of these differences, testing the null hypothesis that survival distributions are identical across clusters. The results suggest that the RSF-derived clusters capture **clinically meaningful heterogeneity in patient outcomes**, with some clusters showing **higher MFS probabilities (lower-risk groups)** and others exhibiting **more rapid declines in survival (higher-risk groups)**.
+
+**Logrank test Interpretation**
+
+1.  **Overall Survival Difference:\
+    ** The **log-rank test** (survdiff) shows a **highly significant difference** in survival across the 6 clusters (p \< 0.0001). This means at least one cluster has a survival pattern different from the others.
+
+2.  **Cluster-Specific Observations:**
+
+    -   **Cluster 2:** Observed (946) is **much higher than expected (496)** → **worse survival** than average.
+
+    -   **Cluster 4:** Observed (70) is **much lower than expected (179)** → **better survival** than average.
+
+    -   **Cluster 1 & 5:** Observed events are closer to expected → survival roughly as predicted.
+
+    -   **Clusters 3 & 6:** Moderate deviations, suggesting intermediate survival differences.
+
+3.  **Magnitude of Differences:**
+
+    -   The (O–E)² / E and (O–E)² / V columns highlight **which clusters contribute most to the chi-square statistic**.
+
+    -   Cluster 2 is the **dominant contributor** (largest (O–E)² / E and (O–E)² / V), indicating it is driving most of the overall survival difference.
+
+```{r}
+#Heatmap of Genomic Features by Cluster
+
+library(dplyr)
+
+gene_summary <- genomic_features %>%
+  group_by(cluster) %>%
+  summarise(across(where(is.numeric), mean))
+gene_matrix <- gene_summary %>%
+  dplyr::select(-time, -event) %>%
+  column_to_rownames("cluster")
+
+library(pheatmap)
+
+pheatmap(
+  gene_matrix,
+  scale = "column",
+  clustering_method = "ward.D2",
+  main = "Genomic Alteration Patterns Across Clusters"
+)
+```
+
+The genomic clusters identified in this study are broadly consistent with patterns reported in prior large-scale cancer sequencing efforts. In particular, the PIK3CA-enriched cluster demonstrated favorable metastasis-free survival, consistent with observations in breast and endometrial cancers. The TP53-dominant cluster reflected the genomic instability phenotype commonly observed across multiple tumor types. Additionally, enrichment of APC and KRAS mutations in one cluster corresponds to canonical WNT and MAPK pathway activation reported in colorectal tumorigenesis. Interestingly, we also identified a genomically quiet yet clinically aggressive subtype, a pattern previously described in several malignancies where non-mutational mechanisms may drive metastatic progression.
+
+| Pattern                             | Previously reported in             |
+|-------------------------------------|------------------------------------|
+| PIK3CA-driven tumors                | TCGA breast/endometrial subtypes   |
+| TP53-dominant tumors                | Pan-cancer genomic studies         |
+| APC/KRAS signaling tumors           | colorectal cancer pathways         |
+| Hypermutated tumors                 | MSI or DNA repair deficient tumors |
+| Genomically quiet aggressive tumors | prostate and pancreatic cancers    |
+
+```{r}
+mds <- cmdscale(dist_obj, k = 2)
+
+plot(mds,
+     col = genomic_features$cluster,
+     pch = 19,
+     xlab = "Dimension 1",
+     ylab = "Dimension 2")
+
+legend("topright",
+       legend = levels(genomic_features$cluster),
+       col = 1:optimal_k,
+       pch = 19)
+```
+
+```{r}
+library(ggplot2)
+
+plot_df <- data.frame(
+  Dim1 = mds[,1],
+  Dim2 = mds[,2],
+  Cluster = as.factor(genomic_features$cluster)
+)
+
+ggplot(plot_df, aes(x = Dim1, y = Dim2, color = Cluster)) +
+  geom_point(size = 2.5, alpha = 0.8) +
+  
+  
+  
+  labs(
+    title = "Dimensional Visualization of RSF Proximity Clusters",
+    x = "Dimension 1",
+    y = "Dimension 2",
+    color = "Cluster"
+  ) +
+  
+  theme_minimal(base_size = 14) +
+  
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    legend.position = "right"
+  )
 ```
 
 ```{r}
 
 ### Patient_clusters 
-patient_clusters <- patient_features %>%
+patient<- genomic_features %>%
   group_by(cluster) %>%
   summarise(across(where(is.numeric), mean))
 
-kable(patient_clusters)
+kable(patient)
 
+```
+
+```{r}
+cox_model <- coxph(Surv(time, event) ~ cluster,
+                   data = genomic_features)
+
+summary(cox_model)
+library(survminer)
+
+ggforest(cox_model,
+         data = genomic_features)
+```
+
+```{r}
+# Optional but Very Strong Figure (Genomic Drivers)
+var_imp <- rsf_model$importance
+
+imp_df <- data.frame(
+  Gene = names(var_imp),
+  Importance = as.numeric(var_imp)
+)
+
+
+
+imp_df <- imp_df[order(-imp_df$Importance),]
+
+head(imp_df, 20)
+library(ggplot2)
+
+top20 <- head(imp_df, 20)
+top20
+
+
+ggplot(top20, aes(x=reorder(Gene,Importance), y=Importance)) +
+  geom_bar(stat="identity") +
+  coord_flip() +
+  labs(
+    title="Top Genomic Predictors of Metastasis",
+    x="Gene",
+    y="Variable Importance"
+  )
 ```
 
 ```{r}
