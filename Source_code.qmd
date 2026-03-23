@@ -183,7 +183,7 @@ met_events <- timeline_progress %>%
 #View(met_events)
 nrow(met_events)
 
-
+#================================================================
 #Extracting Baseline(sequencing time)
 start_time <- timeline_diag %>%
   #filter(PATIENT_ID %in% met_events$PATIENT_ID)%>%
@@ -197,7 +197,7 @@ nrow(start_time)
 n_distinct(start_time$PATIENT_ID)
 start_time[start_time$START_DATE == 0,]
 start_time[start_time$PATIENT_ID ==  "P-0003523" , ]
-
+#=====================================================================
 
   
 
