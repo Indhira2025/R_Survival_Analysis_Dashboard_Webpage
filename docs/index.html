@@ -96,7 +96,7 @@
         <ul>
           <li>Primary outcome: Time to metastasis (TTM)</li>
           <li>Model: Random Survival Forest (1,000 trees)</li>
-          <li>Covariates: Gene-level mutations, TMB, CNA burden</li>
+          <li>Covariates: Gene-level mutations, TMB, CNA burden, Cancer Type</li>
           <li>Software: R 4.4.2 </li>
         </ul>
       </div>
@@ -118,7 +118,7 @@
           <figure>
             <!-- One sentence: what does this figure show? -->
             <p class="fig-finding">
-              Heatmap analysis showed distinct mutation patterns across six clusters, with Cluster 1 exhibiting high mutation burden and genomic instability, Clusters 4, 5, and 6 enriched for PIK3CA, TP53, and APC/KRAS alterations respectively, and Cluster 2 displaying low mutation frequency despite a clinically aggressive phenotype
+              Heatmap analysis showed distinct mutation patterns across five clusters, with Cluster 1 exhibiting high mutation burden and genomic instability,and Cluster 2 displaying low mutation frequency despite a clinically aggressive phenotype
             </p>
             <!-- Update the src to your actual figure filename -->
             <img src="figures/heatmap.png"
@@ -132,16 +132,14 @@
           <!-- Figure 2 — delete this block if you only have one figure -->
           <figure>
             <p class="fig-finding">
-              Kaplan–Meier analysis showed significant differences in 
-              metastasis-free survival across six genomic clusters (log-rank p < 0.0001), 
-              with Cluster 4 and 3 indicating favorable outcomes, Cluster 2 the highest risk, 
-              Cluster 6 moderately poor survival, and Clusters 1 and 5 intermediate risk, 
-              demonstrating effective RSF-based risk stratification.
+              Metastasis-free survival (MFS) probabilities stratified by five unsupervised genomic clusters (k=5). The Kaplan-Meier curves demonstrate significant survival stratification across the identified subgroups (Log-rank). 
+      Shaded regions represent the 95% confidence intervals, indicating robust separation between the high-risk (Cluster 2, orange) and low-risk (Cluster 1, teal) molecular subtypes.
+       The "Number at risk" table (bottom) details the patient census at 1,000-day intervals, confirming substantial data density throughout the follow-up period.
             </p>
             <img src="figures/survivalplot.png"
                  alt="Description of figure 2 for screen readers">
             <figcaption>
-              <strong>Figure 2.</strong>Kaplan–Meier curves for metastasis-free survival across six RSF-derived genomic clusters.Clusters are color-coded as follows: Clusters 1 (blue) ; Cluster 2 (orange); Cluster 3 (purple); Cluster 4 (pink) ; Cluster 6 (yellow)  
+              <strong>Figure 2.</strong>Metastasis-Free Survival by Genomic Cluster:Kaplan–Meier curves for metastasis-free survival across five RSF-derived genomic clusters.Clusters are color-coded as follows: Cluster 1 : Teal, Cluster 2 : Orange, Cluster 3 :Grey, Cluster 4 : Pink, Cluster 5 : Light Green 
             </figcaption>
           </figure>
 
