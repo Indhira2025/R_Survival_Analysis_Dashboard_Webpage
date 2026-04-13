@@ -9,7 +9,7 @@ locally shiny::runApp("MSK_Chord_dataset\MSK\_Dashboard")
 or on a cloud service such as
 [**https://indhirav.shinyapps.io/msk_dashboard/**](https://indhirav.shinyapps.io/msk_dashboard/){.uri}.\
 
-Webpage : https://indhira2025.github.io/Survival_Analysis_Dashboard_Webpage/
+Webpage : https://indhira2025.github.io/R_Survival_Analysis_Dashboard_Webpage/
 ## Abstract
 
 Problem : Metastasis is the leading cause of cancer mortality in solid
