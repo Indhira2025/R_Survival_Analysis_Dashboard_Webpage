@@ -34,10 +34,12 @@ ui <- dashboardPage(
   
   dashboardSidebar(
     sidebarMenu(
-      selectInput("cancer_type",
-                  "Select Cancer Type:",
-                  choices = sort(unique(clin_sample$CANCER_TYPE)),
-                  selected = unique(clin_sample$CANCER_TYPE)[1]),
+      selectInput(
+        "cancer_type",
+        "Select Cancer Type:",
+        choices = c("All", sort(unique(clin_sample$CANCER_TYPE))),
+        selected = "All"
+      ),
       
       menuItem("Overview", tabName = "overview"),
       menuItem ("Metastatic Sites", tabName = "metastatic_sites"),
@@ -96,8 +98,16 @@ ui <- dashboardPage(
 server <- function(input, output) {
   
   # --- Reactive filtered samples for selected cancer type ---
+  filtered_data <- reactive({
+    if (input$cancer_type == "All") {
+      merged_data
+    } else {
+      merged_data[CANCER_TYPE == input$cancer_type]
+    }
+  })
+  
   filtered_samples <- reactive({
-    merged_data[CANCER_TYPE == input$cancer_type]
+    filtered_data()
   })
   
   # --- Overview Value Boxes ---
@@ -107,8 +117,7 @@ server <- function(input, output) {
   })
   
   output$totalSamples <- renderValueBox({
-    n_samp <- nrow(filtered_samples())
-    valueBox(n_samp, "Samples", icon = icon("vial"), color = "green")
+    valueBox(nrow(filtered_samples()), "Samples", icon = icon("vial"), color = "green")
   })
   
   output$totalMutations <- renderValueBox({
@@ -123,22 +132,33 @@ server <- function(input, output) {
   # Metastatic Site
   
   output$metastaticPlot <- renderPlotly({
-    meta_sub <- merged_data[SAMPLE_ID %in% filtered_samples()$SAMPLE_ID &
-                              CANCER_TYPE == input$cancer_type, ]
     
-    site_counts <- meta_sub[!is.na(METASTATIC_SITE) & METASTATIC_SITE != "Not Applicable", 
-                            .N, by = METASTATIC_SITE]
+    meta_sub <- merged_data[
+      SAMPLE_ID %in% filtered_samples()$SAMPLE_ID
+    ]
+    
+    site_counts <- meta_sub[
+      !is.na(METASTATIC_SITE) & METASTATIC_SITE != "Not Applicable",
+      .N, by = METASTATIC_SITE
+    ]
+    
+    if (nrow(site_counts) == 0) return(NULL)
     
     setorder(site_counts, -N)
     
-    if(nrow(site_counts) == 0) return(NULL)
+    site_counts[, METASTATIC_SITE :=
+                  factor(METASTATIC_SITE, levels = METASTATIC_SITE)]
     
-    site_counts[, METASTATIC_SITE := factor(METASTATIC_SITE, levels = site_counts$METASTATIC_SITE)]
-    
-    plot_ly(site_counts, x = ~METASTATIC_SITE, y = ~N, type = 'bar',
-            marker = list(color = 'steelblue')) %>%
-      layout(title = paste("Metastatic sites for", input$cancer_type),
-             xaxis = list(title = "Site"), yaxis = list(title = "Number of Samples"))
+    plot_ly(site_counts,
+            x = ~METASTATIC_SITE,
+            y = ~N,
+            type = "bar",
+            marker = list(color = "steelblue")) %>%
+      layout(
+        title = paste("Metastatic sites:", input$cancer_type),
+        xaxis = list(title = ""),
+        yaxis = list(title = "Samples")
+      )
   })
   
   
@@ -271,27 +291,59 @@ server <- function(input, output) {
   })
   
   # --- Survival Plot ---
+ 
   output$survivalPlot <- renderPlot({
-    datasurv <- merged_data[merged_data$CANCER_TYPE == input$cancer_type, ]  
     
-    if(nrow(datasurv) == 0) return(NULL)
+    datasurv <- filtered_data()
     
-    fit <- do.call(survfit, list(
-      formula = Surv(as.numeric(OS_MONTHS), OS_STATUS_BIN) ~ 1, 
-      data = as.data.frame(datasurv)
-    ))
+    if (nrow(datasurv) == 0) return(NULL)
     
-    ggsurvplot(fit,
-               risk.table = TRUE,
-               conf.int = TRUE,
-               xlab = "Months",
-               ylab = "Survival Probability",
-               title = paste("Overall Survival for", input$cancer_type))$plot
+    # Ensure correct types
+    datasurv[, OS_MONTHS := as.numeric(OS_MONTHS)]
+    datasurv[, OS_STATUS_BIN := as.numeric(OS_STATUS_BIN)]
+    
+    # ---- CASE 1: ALL cancer types → stratified curves ----
+    if (input$cancer_type == "All") {
+      
+      fit <- survival::survfit(
+        survival::Surv(OS_MONTHS, OS_STATUS_BIN) ~ CANCER_TYPE,
+        data = datasurv
+      )
+      
+    } else {
+      
+      # ---- CASE 2: single cancer type → overall curve ----
+      fit <- survival::survfit(
+        survival::Surv(OS_MONTHS, OS_STATUS_BIN) ~ 1,
+        data = datasurv
+      )
+    }
+    
+    p <- survminer::ggsurvplot(
+      fit,
+      data = datasurv,
+      risk.table = TRUE,
+      conf.int = TRUE,
+      pval = TRUE,
+      legend.title = "Cancer Type",
+      legend.labs = if (input$cancer_type == "All") {
+        sort(unique(datasurv$CANCER_TYPE))
+      } else {
+        NULL
+      },
+      xlab = "Months",
+      ylab = "Survival Probability",
+      title = if (input$cancer_type == "All") {
+        "Overall Survival Across Cancer Types"
+      } else {
+        paste("Overall Survival for", input$cancer_type)
+      }
+    )
+    
+    print(p$plot)
   })
+  
 }
-
-
-
 # --- Run App ---
 shinyApp(ui, server)
 
