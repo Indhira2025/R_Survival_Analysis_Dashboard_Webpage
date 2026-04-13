@@ -450,6 +450,8 @@ genomic_features <- analysis_df %>%
   left_join(tmb_df, by = "PATIENT_ID") %>%
   left_join(cna_patients, by = "PATIENT_ID") 
 table(genomic_features$CANCER_TYPE)
+
+genomic_features$CANCER_TYPE <- as.factor(genomic_features$CANCER_TYPE)
 genomic_features[is.na(genomic_features)] <- 0
 
 #View(analysis_df)
@@ -543,6 +545,9 @@ optimal_k
 ```
 
 ```{r}
+
+#RSF Clustering with Cancertype and genomic features
+
 library(randomForestSRC)
 library(survival)
 library(dplyr)
@@ -556,7 +561,7 @@ rsf_data_type <- genomic_features %>%
   dplyr::select(-PATIENT_ID, -SAMPLE_ID)
 
 set.seed(123)
-genomic_features$CANCER_TYPE <- as.factor(genomic_features$CANCER_TYPE)
+
 # Fit RSF model
 rsf_model_type <- rfsrc(
   Surv(time, event) ~ .,
@@ -590,17 +595,18 @@ optimal_k1
 
 ```{r}
 
+
 # 1. Fit PAM for k=5
 final_pam5 <- pam(dist_obj1, k = 5, diss = TRUE)
 # Check cluster sizes
 table(final_pam5$clustering)
-# 2. Add the k=5 labels to your data
+#  Add the k=5 labels to your data
 genomic_features$cluster_k5 <- as.factor(final_pam5$clustering)
 
-# 3. Fit survival curve for k=5
+#  Fit survival curve for k=5
 fit_k5 <- survfit(Surv(time, event) ~ cluster_k5, data = genomic_features)
 
-# 4. Plot the results
+# Plot the results
 ggsurvplot(
   fit_k5, 
   data = genomic_features, 
@@ -616,6 +622,8 @@ print(fit_k5)
 ```
 
 ```{r}
+# 2. Fit PAM for k=10
+
 final_pam10 <- pam(dist_obj1, k = 10, diss = TRUE)
 
 # Check cluster sizes
@@ -636,9 +644,10 @@ ggsurvplot(fit_k10, data = genomic_features, pval = TRUE,
 
 ```
 
-chose k=5 because it provided the optimal balance of mathematical stability and clinical utility, yielding distinct, non-overlapping survival trajectories that clearly stratified patients into actionable risk tiers.
-
 ```{r}
+##RSF Model Evaluation
+
+
 library(survival)
 library(pec)
 library(timeROC)
@@ -688,7 +697,7 @@ library(cluster)
 ###Cluster Stabilty Analysis
 
 
-# Your RSF distance matrix
+# RSF distance matrix
 dist_matrix2 <- as.dist(1 - prox_matrix1)
 
 stability_results <- list()
@@ -721,7 +730,7 @@ print(stability_df)
 ```{r}
 #Final Clustering (PAM)
 
-# selected k=5
+# selected k=5 based on stablity analysis
 pam_final <- pam(dist_obj1,
                  k = 5,# Based on stability analysis
                  diss = TRUE)
@@ -772,10 +781,12 @@ table(genomic_features$cluster, genomic_features$CANCER_TYPE)
 ```
 
 ```{r}
+#Cluster Association Analysis
+
 
 table(genomic_features$CANCER_TYPE)
 
-#Cluster Association Analysis
+
 # 1. Create the contingency table
 contingency_table <- table(genomic_features$cluster, genomic_features$CANCER_TYPE)
 
@@ -835,7 +846,7 @@ survival plot:
 This adds a massive layer of clinical insight: it suggests that the "Breast Cancer" signature in dataset is significantly more aggressive than the "Colorectal" signature in Cluster 1.
 
 ```{r}
-library(dplyr)
+
 
 # Count patients per cancer type
 cancer_counts <- genomic_features %>%
@@ -847,6 +858,9 @@ cancer_counts
 ```
 
 ```{r}
+
+#Within- Cancer Type Clustering for high prevalence cancers
+
 library(randomForestSRC)
 library(cluster)
 library(dplyr)
@@ -1072,10 +1086,20 @@ pheatmap(
 
 ```{r}
 
+prior_meds <- read.delim("msk_chord_2024_data/data_timeline_prior_meds.txt", comment.char="#")
+head(prior_meds)
+
+prior_meds_new <- prior_meds%>%
+  rename(Prior_Meds_Binary = PRIOR_MED_TO_MSK) %>%
+  mutate(Prior_Meds_Binary = ifelse(Prior_Meds_Binary == "Prior medications to MSK", 1, 0))
+
+prior_meds_new$Prior_Meds_Binary <- as.factor(prior_meds_new$Prior_Meds_Binary)
+
+
 names(clinical_features)
 genomic_features_full <- genomic_features%>%
-  left_join(clinical_features, by = "PATIENT_ID")
-
+  left_join(clinical_features, by = "PATIENT_ID")%>%
+  left_join(prior_meds_new, by = "PATIENT_ID")
 
 genomic_features_full
 
@@ -1160,6 +1184,22 @@ ggplot(plot_df, aes(x = Dim1, y = Dim2, color = Cluster)) +
     plot.title = element_text(hjust = 0.5, face = "bold"),
     legend.position = "right"
   )
+```
+
+```{r}
+### Penalized cox regression
+library(survival)
+
+# Fit the multivariable model
+# This tests: Is Cluster membership still significant AFTER accounting for Age, Sex, etc?
+cox_model <- coxph(Surv(time, event) ~ cluster_k5 + CURRENT_AGE_DEID + GENDER + 
+                   Prior_Meds_Binary + CANCER_TYPE, 
+                   data = genomic_features_full)
+
+# View the results
+summary(cox_model)
+
+
 ```
 
 ```{r}
