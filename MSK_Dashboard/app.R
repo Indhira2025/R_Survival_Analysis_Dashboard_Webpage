@@ -43,11 +43,11 @@ ui <- dashboardPage(
       
       menuItem("Overview", tabName = "overview"),
       menuItem ("Metastatic Sites", tabName = "metastatic_sites"),
-      menuItem("Oncoplot", tabName = "oncoplot"),
       menuItem("CNA", tabName = "cna"),
       menuItem("Fusions", tabName = "fusion"),
       menuItem("TMB(Tumor Mutation Burden)", tabName = "tmb"),
-      menuItem("Survival", tabName = "survival")
+      menuItem("Survival", tabName = "survival"),
+      menuItem("Oncoplot", tabName = "oncoplot")
     )
   ),
   
