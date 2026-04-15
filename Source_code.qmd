@@ -493,7 +493,8 @@ rsf_model_type <- rfsrc(
   Surv(time, event) ~ .,
   data = rsf_data_type,
   ntree = 1000,
-  proximity = "oob"
+  proximity = "oob",
+  importance = "permute" 
 )
 
 # Proximity matrix
@@ -612,8 +613,6 @@ pam_final <- pam(dist_obj1,
                  diss = TRUE)
 
 genomic_features$cluster <- factor(pam_final$clustering)
-
-
 ```
 
 ```{r}
@@ -650,6 +649,89 @@ ggsurvplot(
 )
 
 
+```
+
+```{r}
+
+cluster_vimp_list <- list()
+
+set.seed(123)
+
+for (cl in levels(genomic_features$cluster)) {
+  
+  # Subset data for cluster
+  data_cl <- genomic_features %>%
+    filter(cluster == cl)
+  
+  # Remove IDs + cluster column
+  rsf_data_cl <- data_cl %>%
+    select(-PATIENT_ID, -SAMPLE_ID, -cluster)
+  
+  # Fit RSF model within cluster
+  rsf_cl <- rfsrc(
+    Surv(time, event) ~ .,
+    data = rsf_data_cl,
+    ntree = 500,
+    importance = "permute"
+  )
+  
+  # Store VIMP
+  cluster_vimp_list[[cl]] <- rsf_cl$importance
+}
+
+library(tidyr)
+
+cluster_vimp_df <- bind_rows(
+  lapply(names(cluster_vimp_list), function(cl) {
+    data.frame(
+      variable = names(cluster_vimp_list[[cl]]),
+      importance = cluster_vimp_list[[cl]],
+      cluster = paste0("Cluster_", cl)
+    )
+  })
+)
+
+cluster_vimp_df <- cluster_vimp_df %>%
+  group_by(cluster) %>%
+  mutate(norm_importance = importance / max(importance)) %>%
+  ungroup()
+
+
+library(ggplot2)
+
+ggplot(cluster_vimp_df, aes(x = cluster, y = reorder(variable, norm_importance))) +
+  geom_tile(aes(fill = norm_importance)) +
+  # Gradient2 creates the diverging scale
+  scale_fill_gradient2(
+    low = "blue",      # Color for negative VIMP (noise)
+    mid = "white",     # Color for zero VIMP
+    high = "red",      # Color for positive VIMP (importance)
+    midpoint = 0,
+    name = "Normalized VIMP"
+  ) +
+  theme_minimal() +
+  labs(
+    title = "Cluster-Specific Variable Importance (RSF)",
+    subtitle = "Blue indicates negative importance (potential noise)",
+    x = "Cluster",
+    y = "Features"
+  )
+```
+
+```{r}
+top_features <- cluster_vimp_df %>%
+  group_by(cluster) %>%
+  slice_max(norm_importance, n = 10) %>%
+  ungroup()
+ggplot(top_features, aes(x = cluster, y = reorder(variable, norm_importance))) +
+  geom_tile(aes(fill = norm_importance)) +
+  scale_fill_gradient(low = "white", high = "blue") +
+  theme_minimal() +
+  labs(
+    title = "Top 10 Important Features per Cluster",
+    x = "Cluster",
+    y = "Features"
+  )
 ```
 
 ```{r}
@@ -1004,14 +1086,45 @@ ggplot(
 ```
 
 ```{r}
-top_features <- vimp_df %>%
+
+get_vimp_df_new <- function(result, cancer_name) {
+  data.frame(
+    variable = names(result$vimp),
+    importance = result$vimp
+  ) %>%
+    mutate(cancer = cancer_name)
+}
+
+vimp_df_new <- bind_rows(
+  get_vimp_df_new(clustering_results[["Breast Cancer"]], "Breast Cancer"),
+  get_vimp_df_new(clustering_results[["Non-Small Cell Lung Cancer"]], "Lung Cancer"),
+  get_vimp_df_new(clustering_results[["Colorectal Cancer"]], "Colorectal Cancer")
+)
+vimp_df_n <- vimp_df_new %>%
   group_by(cancer) %>%
-  slice_max(norm_importance, n = 30) %>%
+  mutate(norm_importance = importance / max(importance)) %>%
   ungroup()
 
-common_features <- top_features %>%
+top_features_new <- vimp_df_n %>%
+  group_by(cancer) %>%
+  #slice_max(norm_importance, n = 30) %>%
+  ungroup()
+
+common_features <- top_features_new %>%
   group_by(variable) %>%
   filter(n_distinct(cancer) == 3)
+
+ggplot(common_features, aes(x = reorder(variable, norm_importance), 
+                            y = norm_importance, 
+                            fill = cancer)) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title = "Common Important Features Across All Cancer Types",
+    x = "Features",
+    y = "Normalized Importance"
+  )
 ```
 
 ```{r}
@@ -1200,6 +1313,10 @@ vimp_plots[["Breast Cancer"]]
 
 ```
 
+```{r}
+
+```
+
 ### **Survival Differences Across RSF-Derived Clusters**
 
 Kaplan–Meier survival analysis was performed to evaluate differences in metastasis-free survival (MFS) across the genomic clusters identified by the Random Survival Forest (RSF) clustering approach. The survival curves demonstrated **clear separation between clusters**, indicating distinct survival patterns among patient groups. A **log-rank test** was conducted to assess statistical significance of these differences, testing the null hypothesis that survival distributions are identical across clusters. The results suggest that the RSF-derived clusters capture **clinically meaningful heterogeneity in patient outcomes**, with some clusters showing **higher MFS probabilities (lower-risk groups)** and others exhibiting **more rapid declines in survival (higher-risk groups)**.
@@ -1358,6 +1475,87 @@ t.test(CURRENT_AGE_DEID ~ cluster_k5, data = subset(genomic_features_full, clust
 ```
 
 "Clinical characterization of the molecular clusters revealed a significant association with patient gender (p\<0.001). **Cluster 2** was predominantly female (92.0%), consistent with its enrichment for Breast Cancer, while **Cluster 5** was almost exclusively male (94.5%), reflecting its Prostate Cancer composition. Clusters 1, 3, and 4 exhibited more balanced gender distributions, aligning with their higher proportions of Lung and Colorectal cancers."
+
+```{r}
+prior_meds <- read.delim("msk_chord_2024_data/data_timeline_prior_meds.txt", comment.char="#")
+head(prior_meds)
+
+prior_meds_new <- prior_meds%>%
+  rename(Prior_Meds_Binary = PRIOR_MED_TO_MSK) %>%
+  mutate(Prior_Meds_Binary = ifelse(Prior_Meds_Binary == "Prior medications to MSK", 1, 0))
+
+prior_meds_new$Prior_Meds_Binary <- as.factor(prior_meds_new$Prior_Meds_Binary)
+
+
+names(clinical_features)
+genomic_features_full <- genomic_features%>%
+  left_join(clinical_features, by = "PATIENT_ID")%>%
+  left_join(prior_meds_new, by = "PATIENT_ID")
+
+genomic_features_full
+
+```
+
+```{r}
+library(survival)
+
+# Fit the multivariable model
+# This tests: Is Cluster membership still significant AFTER accounting for Age, Sex, etc?
+
+genomic_features_full$CANCER_TYPE <- as.factor(genomic_features_full$CANCER_TYPE)
+genomic_features_full$CANCER_TYPE <- relevel(genomic_features_full$CANCER_TYPE, ref = "Prostate Cancer")
+cox_model <- coxph(Surv(time, event) ~ cluster + CURRENT_AGE_DEID + GENDER + 
+                   Prior_Meds_Binary + CANCER_TYPE, 
+                   data = genomic_features_full)
+
+# View the results
+summary(cox_model)
+```
+
+```{r}
+library(broom)
+library(dplyr)
+
+cox_df <- tidy(cox_model, exponentiate = TRUE, conf.int = TRUE)
+cox_df <- cox_df %>%
+  filter(term != "(Intercept)") %>%
+  mutate(
+    term = gsub("cluster", "Cluster ", term),
+    term = gsub("CURRENT_AGE_DEID", "Age", term),
+    term = gsub("GENDER", "Gender: ", term),
+    term = gsub("Prior_Meds_Binary", "Prior Meds", term),
+    term = gsub("CANCER_TYPE", "Cancer: ", term)
+  )
+
+library(ggplot2)
+
+ggplot(cox_df, aes(x = estimate, y = reorder(term, estimate))) +
+  
+  # Confidence intervals
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
+                 height = 0.2, color = "gray40") +
+  
+  # Points (HR)
+  geom_point(aes(color = estimate), size = 3) +
+  
+  # Reference line (HR = 1)
+  geom_vline(xintercept = 1, linetype = "dashed", color = "red") +
+  
+  # Log scale (important for HR)
+  scale_x_log10() +
+  
+  # Color gradient
+  scale_color_gradient(low = "blue", high = "darkred") +
+  
+  theme_minimal(base_size = 14) +
+  
+  labs(
+    title = "Multivariable Cox Model: Hazard Ratios",
+    x = "Hazard Ratio (log scale)",
+    y = "",
+    color = "HR"
+  )
+```
 
 The genomic clusters identified in this study are broadly consistent with patterns reported in prior large-scale cancer sequencing efforts. In particular, the PIK3CA-enriched cluster demonstrated favorable metastasis-free survival, consistent with observations in breast and endometrial cancers. The TP53-dominant cluster reflected the genomic instability phenotype commonly observed across multiple tumor types. Additionally, enrichment of APC and KRAS mutations in one cluster corresponds to canonical WNT and MAPK pathway activation reported in colorectal tumorigenesis. Interestingly, we also identified a genomically quiet yet clinically aggressive subtype, a pattern previously described in several malignancies where non-mutational mechanisms may drive metastatic progression.
 

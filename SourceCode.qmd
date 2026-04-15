@@ -1,0 +1,104 @@
+---
+title: "MSK_Chord_Analysis"
+format: html
+editor: visual
+---
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(data.table)
+library(survival)
+#library(randomForestSRC)
+library(cluster)
+#library(survminer)
+#library(caret)
+library(pROC)
+library(kableExtra)
+
+
+
+# Loading the data directly from Github
+
+url_clipat <- paste("https://media.githubusercontent.com/media/cBioPortal/datahub", 
+                    "/refs/heads/master/public/msk_chord_2024/data_clinical_patient.txt",
+                    sep="")
+url_clisamp <- paste("https://media.githubusercontent.com/media/cBioPortal/datahub", 
+                     "/refs/heads/master/public/msk_chord_2024/data_clinical_sample.txt", 
+                     sep="")
+
+url_timediag <- paste("https://media.githubusercontent.com/media/cBioPortal/datahub/refs/heads/master/public/msk_chord_2024/data_timeline_diagnosis.txt", sep="")
+
+
+url_time_progress<- paste("https://media.githubusercontent.com/media/cBioPortal/datahub/refs/heads/master/public/msk_chord_2024/data_timeline_progression.txt", sep ="")
+
+
+
+# Reading the data
+clinical_patient <- read.delim(url_clipat, comment.char="#", 
+                               stringsAsFactors = TRUE)
+
+head(clinical_patient)
+names(clinical_patient)
+typeof(clinical_patient)
+#str(clinical_patient)
+
+clinical_sample <- read.delim(url_clisamp, comment.char="#",
+                              stringsAsFactors = TRUE)
+
+
+
+#View(clinical_sample)
+kable(table(clinical_sample$CANCER_TYPE))
+names (clinical_sample)
+length(unique(clinical_sample$PATIENT_ID))
+nrow(clinical_sample)
+table(clinical_sample$SAMPLE_TYPE)
+str(clinical_sample)
+
+
+timeline_diag <-  read.delim(url_timediag, comment.char="#",
+                             stringsAsFactors = TRUE)
+
+names(timeline_diag)
+
+
+timeline_progress <-  read.delim(url_time_progress, comment.char="#",
+                                 stringsAsFactors = TRUE)
+#View(timeline_progress)
+names(timeline_progress)
+table(timeline_progress$PROGRESSION)
+
+
+clinical_features <- clinical_patient %>%
+  dplyr::select(PATIENT_ID,
+                GENDER,
+                RACE,
+                ETHNICITY,
+                CURRENT_AGE_DEID,
+                SMOKING_PREDICTIONS_3_CLASSES,
+                OS_MONTHS,
+                OS_STATUS)
+clinical_features
+```
+
+```{r}
+
+
+#typeof(clinical_sample)
+table(clinical_sample$SAMPLE_TYPE)
+str(clinical_sample)
+clinical_sample[clinical_sample$PATIENT_ID == "P-0000012",]
+clinical_sample[clinical_sample$PATIENT_ID == "P-0000825",]
+clinical_sample[clinical_sample$PATIENT_ID == "P-0002880",]
+
+clinical_sample[clinical_sample$SAMPLE_TYPE == "Primary", ]
+
+### Viewing multiple samples per patient
+
+sample_counts <- clinical_sample %>%
+  count(PATIENT_ID, name = "n_samples")
+
+sample_counts[sample_counts$n_samples == 2,]
+#View(sample_counts)
+```
