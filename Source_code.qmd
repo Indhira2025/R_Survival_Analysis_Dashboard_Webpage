@@ -471,80 +471,6 @@ genomic_features[genomic_features$time == 0,]
 ```
 
 ```{r}
-###  RSF Clustering
-
-#Create a survival object
-#install.packages("randomForestSRC")
-library(randomForestSRC)
-library(survival)
-surv_obj <- Surv(time = genomic_features$time, # creates the correct structure                                                                                             required 
-                 event = genomic_features$event) # for RSF 
-
-
-
-# Remove ID column for modeling
-rsf_data <- genomic_features %>%
-  dplyr::select(-PATIENT_ID, -SAMPLE_ID, -CANCER_TYPE)
-nrow(rsf_data)
-# Fit RSF
-set.seed(123)
-
-#============================================================================
-#rsf_model_main <- rfsrc(
-  #Surv(time, event) ~ .,
-  #data = rsf_data,
-  #ntree = 1000,
-  #importance = TRUE
-#)
-#rsf_model_main$err.rate
-#plot(rsf_model_main)  # RSF knows how to handle NAs in err.rate
-#=============================================================================
-
-### Main model
-
-rsf_model <- rfsrc(
-  Surv(time, event) ~ .,
-  data = rsf_data,
-  ntree = 1000,
-  proximity = "oob"
-)
-library(survival)
-
-
-
-prox_matrix <- rsf_model$proximity
-#View(prox_matrix)
-dim(prox_matrix)
-
-# Create distance Matrix
-
-dist_matrix <- 1 - prox_matrix
-dist_matrix
-
-# create distance object
-dist_obj <- as.dist(dist_matrix)
-dist_obj
-
-# Determine Optimal Number of Clusters (Silhouette Method)
-
-library(cluster)
-
-sil_width <- c()
-
-for (k in 2:15) {
-  pam_fit <- pam(dist_obj, k = k, diss = TRUE)
-  sil_width[k] <- pam_fit$silinfo$avg.width
-}
-
-plot(2:15, sil_width[2:15], type = "b",
-     xlab = "Number of clusters",
-     ylab = "Average Silhouette Width")
-optimal_k <- which.max(sil_width)
-optimal_k
-
-```
-
-```{r}
 
 #RSF Clustering with Cancertype and genomic features
 
@@ -594,59 +520,7 @@ optimal_k1
 ```
 
 ```{r}
-
-
-# 1. Fit PAM for k=5
-final_pam5 <- pam(dist_obj1, k = 5, diss = TRUE)
-# Check cluster sizes
-table(final_pam5$clustering)
-#  Add the k=5 labels to your data
-genomic_features$cluster_k5 <- as.factor(final_pam5$clustering)
-
-#  Fit survival curve for k=5
-fit_k5 <- survfit(Surv(time, event) ~ cluster_k5, data = genomic_features)
-
-# Plot the results
-ggsurvplot(
-  fit_k5, 
-  data = genomic_features, 
-  pval = TRUE, 
-  risk.table = TRUE,          # Adds a table showing patients at risk
-  title = "Survival by Cluster (k=5)",
-  legend.labs = paste0("Cluster ", 1:5),
-  palette = "jco" ,
-  conf.int = TRUE     # Uses a professional color palette
-)
-
-print(fit_k5)
-```
-
-```{r}
-# 2. Fit PAM for k=10
-
-final_pam10 <- pam(dist_obj1, k = 10, diss = TRUE)
-
-# Check cluster sizes
-table(final_pam10$clustering)
-
-library(survival)
-library(survminer)
-
-# Add cluster labels
-genomic_features$cluster_k10 <- as.factor(final_pam10$clustering)
-
-# Fit survival curve
-fit_k10 <- survfit(Surv(time, event) ~ cluster_k10, data = genomic_features)
-
-# Plot and check the P-value
-ggsurvplot(fit_k10, data = genomic_features, pval = TRUE, 
-           title = "Survival by Cluster (k=14)", conf.int = TRUE)
-
-```
-
-```{r}
 ##RSF Model Evaluation
-
 
 library(survival)
 library(pec)
@@ -726,6 +600,8 @@ print(stability_df)
 ```
 
 "Cluster stability analysis using 100 bootstrap iterations confirmed that K=5 provided a highly stable solution (Mean Jaccard Index = **0.918**), whereas higher cluster counts (e.g., K=6 or 10) resulted in a significant reduction in stability and the emergence of poorly defined subgroups."
+
+![](images/clipboard-2431664736.png)
 
 ```{r}
 #Final Clustering (PAM)
@@ -880,7 +756,8 @@ run_rsf_clustering <- function(data, cancer_type, ntree = 1000, k_range = 2:15) 
     Surv(time, event) ~ .,
     data = rsf_data_sub,
     ntree = ntree,
-    proximity = "oob"
+    proximity = "oob",
+    importance = TRUE 
   )
   
   # Create distance matrix
@@ -888,25 +765,36 @@ run_rsf_clustering <- function(data, cancer_type, ntree = 1000, k_range = 2:15) 
   dist_obj_sub <- as.dist(1 - prox_matrix_sub)
   
   # Determine optimal clusters (Silhouette method)
-  sil_width_sub <- c()
-  for (k in k_range) {
-    pam_fit <- pam(dist_obj_sub, k = k, diss = TRUE)
-    sil_width_sub[k] <- pam_fit$silinfo$avg.width
-  }
+
   
-  optimal_k_sub <- which.max(sil_width_sub)
+  sil_width_sub <- numeric(length(k_range))
+
+for (i in seq_along(k_range)) {
+  k <- k_range[i]
+  pam_fit <- pam(dist_obj_sub, k = k, diss = TRUE)
+  sil_width_sub[i] <- pam_fit$silinfo$avg.width
+}
+  
+  optimal_k_sub <- k_range[which.max(sil_width_sub)]
   
   # Final clustering using optimal k
   pam_fit_sub <- pam(dist_obj_sub, k = optimal_k_sub, diss = TRUE)
   
+  vimp_sub <- rsf_model_sub$importance
+  
+  
   # Return results
   list(
-    rsf_model = rsf_model_sub,
-    distance = dist_obj_sub,
-    optimal_k = optimal_k_sub,
-    clusters = pam_fit_sub$clustering,
-    silhouette = sil_width_sub
+  rsf_model = rsf_model_sub,
+  distance = dist_obj_sub,
+  optimal_k = optimal_k_sub,
+  clusters = pam_fit_sub$clustering,
+  vimp = vimp_sub,  
+  silhouette = data.frame(
+    k = k_range,
+    sil_width = sil_width_sub
   )
+)
 }
 
 # High-prevalence cancer types
@@ -923,6 +811,234 @@ names(clustering_results) <- high_prev
 clustering_results[["Breast Cancer"]]$optimal_k
 clustering_results[["Non-Small Cell Lung Cancer"]]$optimal_k
 clustering_results[["Colorectal Cancer"]]$optimal_k
+
+
+plot_silhouette <- function(result, cancer_name) {
+  
+  df <- result$silhouette
+  
+  ggplot(df, aes(x = k, y = sil_width)) +
+    geom_line() +
+    geom_point() +
+    geom_vline(xintercept = result$optimal_k, linetype = "dashed") +
+    theme_minimal() +
+    labs(
+      title = paste("Silhouette Analysis -", cancer_name),
+      x = "Number of Clusters (K)",
+      y = "Average Silhouette Width"
+    )
+}
+
+plots <- lapply(names(clustering_results), function(ct) {
+  plot_silhouette(clustering_results[[ct]], ct)
+})
+
+names(plots) <- names(clustering_results)
+
+plots[["Breast Cancer"]]
+plots[["Non-Small Cell Lung Cancer"]]
+plots[["Colorectal Cancer"]]
+```
+
+![](images/clipboard-2289444558.png)
+
+```{r}
+# Breast Cancer VIMP
+clustering_results[["Breast Cancer"]]$vimp
+
+# Lung Cancer VIMP
+clustering_results[["Non-Small Cell Lung Cancer"]]$vimp
+
+# Colorectal Cancer VIMP
+clustering_results[["Colorectal Cancer"]]$vimp
+```
+
+```{r}
+get_vimp_df <- function(result, cancer_name) {
+  data.frame(
+    variable = names(result$vimp),
+    importance = result$vimp
+  ) %>%
+    mutate(cancer = cancer_name)
+}
+
+vimp_df <- bind_rows(
+  get_vimp_df(clustering_results[["Breast Cancer"]], "Breast Cancer"),
+  get_vimp_df(clustering_results[["Non-Small Cell Lung Cancer"]], "Lung Cancer"),
+  get_vimp_df(clustering_results[["Colorectal Cancer"]], "Colorectal Cancer")
+)
+```
+
+```{r}
+vimp_df <- vimp_df %>%
+  group_by(cancer) %>%
+  mutate(norm_importance = importance / max(importance)) %>%
+  ungroup()
+```
+
+```{r}
+library(tidyr)
+library(ggplot2)
+
+heatmap_df <- vimp_df %>%
+  select(variable, cancer, norm_importance) %>%
+  pivot_wider(names_from = cancer, values_from = norm_importance, values_fill = 0)
+
+
+heatmap_long <- heatmap_df %>%
+  pivot_longer(-variable, names_to = "cancer", values_to = "importance")
+
+ggplot(heatmap_long, aes(x = cancer, y = reorder(variable, importance), fill = importance)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "red") +
+  theme_minimal() +
+  labs(
+    title = "Shared and Cancer-Specific Important Features",
+    x = "Cancer Type",
+    y = "Features",
+    fill = "Normalized Importance"
+  ) 
+```
+
+```{r}
+
+breast_data <- genomic_features %>%
+  filter(CANCER_TYPE == "Breast Cancer")
+
+rsf_data <- breast_data %>%
+  select(-PATIENT_ID, -SAMPLE_ID, -CANCER_TYPE)
+
+# RSF model
+set.seed(123)
+rsf_model <- rfsrc(
+  Surv(time, event) ~ .,
+  data = rsf_data,
+  ntree = 1000,
+  proximity = "oob",
+  importance = "permute"
+)
+
+# Distance matrix
+dist_obj_b <- as.dist(1 - rsf_model$proximity)
+
+# Force k = 5 clustering
+pam_fit_b <- pam(dist_obj_b, k = 5, diss = TRUE)
+
+breast_data$cluster <- factor(pam_fit_b$clustering)
+```
+
+```{r}
+
+
+get_cluster_vimp <- function(data, cluster_id) {
+  
+  cluster_data <- data %>%
+    filter(cluster == cluster_id) %>%
+    select(-PATIENT_ID, -SAMPLE_ID, -CANCER_TYPE, -cluster)
+  
+  set.seed(123)
+  
+  model <- rfsrc(
+    Surv(time, event) ~ .,
+    data = cluster_data,
+    ntree = 1000,
+    importance = "permute"
+  )
+  
+  vimp <- model$importance
+  
+  data.frame(
+    variable = names(vimp),
+    importance = vimp,
+    cluster = paste0("Cluster ", cluster_id)
+  )
+}
+vimp_list <- lapply(sort(unique(breast_data$cluster)), function(cl) {
+  get_cluster_vimp(breast_data, cl)
+})
+
+vimp_df <- bind_rows(vimp_list)
+
+vimp_df <- vimp_df %>%
+  group_by(cluster) %>%
+  mutate(norm_importance = importance / max(importance)) %>%
+  ungroup()
+
+top_features <- vimp_df %>%
+  group_by(cluster) %>%
+  slice_max(norm_importance, n = 15) %>%
+  ungroup()
+
+library(tidyr)
+library(ggplot2)
+
+heatmap_df <- top_features %>%
+  select(variable, cluster, norm_importance) %>%
+  pivot_wider(names_from = cluster, values_from = norm_importance, values_fill = 0)
+
+heatmap_long <- heatmap_df %>%
+  pivot_longer(-variable, names_to = "cluster", values_to = "importance")
+
+ggplot(
+  heatmap_long,
+  aes(
+    x = cluster,
+    y = factor(variable, levels = rev(unique(variable))),
+    fill = importance
+  )
+) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "red") +
+  theme_minimal() +
+  labs(
+    title = "Cluster-Specific Variable Importance in Breast Cancer (k = 5)",
+    x = "Cluster",
+    y = "Features",
+    fill = "Normalized Importance"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    axis.text.y = element_text(size = 9),
+    plot.title = element_text(face = "bold")
+  )
+```
+
+```{r}
+top_features <- vimp_df %>%
+  group_by(cancer) %>%
+  slice_max(norm_importance, n = 30) %>%
+  ungroup()
+
+common_features <- top_features %>%
+  group_by(variable) %>%
+  filter(n_distinct(cancer) == 3)
+```
+
+```{r}
+ggplot(common_features, aes(x = reorder(variable, norm_importance), 
+                            y = norm_importance, 
+                            fill = cancer)) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title = "Common Important Features Across All Cancer Types",
+    x = "Features",
+    y = "Normalized Importance"
+  )
+```
+
+```{r}
+ggplot(vimp_df %>% filter(norm_importance > 0.3),
+       aes(x = cancer, y = variable, size = norm_importance, color = cancer)) +
+  geom_point(alpha = 0.7) +
+  theme_minimal() +
+  labs(
+    title = "Feature Importance Across Cancer Types",
+    x = "Cancer Type",
+    y = "Features",
+    size = "Importance"
+  )
 ```
 
 ```{r}
@@ -971,6 +1087,117 @@ ggsurvplot(colorectal_surv, data = colorectal_data, pval = TRUE, conf.int = TRUE
            risk.table = TRUE, legend.title = "Cluster",
            palette = "Dark2",
            title = "Colorectal Cancer: KM by RSF Cluster")
+```
+
+```{r}
+library(survminer)
+library(survival)
+
+make_custom_km_plot <- function(cancer_name, custom_k, results_list, original_data) {
+  
+  # 1. Get the distance matrix for this cancer from your previous results
+  # This saves time so you don't have to re-run the Random Forest
+  dist_obj <- results_list[[cancer_name]]$distance
+  
+  # 2. Run PAM clustering with your CUSTOM k
+  pam_fit_custom <- pam(dist_obj, k = custom_k, diss = TRUE)
+  
+  # 3. Subset data and attach the new clusters
+  plot_data <- original_data %>% filter(CANCER_TYPE == cancer_name)
+  plot_data$cluster <- factor(pam_fit_custom$clustering)
+  
+  # 4. Fit Survival Curve
+  km_fit <- survfit(Surv(time, event) ~ cluster, data = plot_data)
+  
+  # 5. Create Plot
+  ggsurvplot(
+    km_fit,
+    data = plot_data,
+    pval = TRUE,
+    conf.int = TRUE,
+    risk.table = TRUE,
+    title = paste(cancer_name, ": Survival (Custom k =", custom_k, ")"),
+    legend.labs = paste0("Cluster ", 1:custom_k),
+    palette = "jco",
+    ggtheme = theme_minimal()
+  )
+}
+
+# Define which k you want for each cancer type
+custom_k_values <- list(
+  "Breast Cancer" = 4,
+  "Non-Small Cell Lung Cancer" = 4,
+  "Colorectal Cancer" = 5
+)
+
+
+# Run for Breast Cancer with k=5
+breast_plot <- make_custom_km_plot("Breast Cancer", custom_k_values[["Breast Cancer"]], 
+                                  clustering_results, genomic_features)
+
+# Run for Lung Cancer with k=4
+lung_plot <- make_custom_km_plot("Non-Small Cell Lung Cancer", custom_k_values[["Non-Small Cell Lung Cancer"]], 
+                                 clustering_results, genomic_features)
+
+# Run for Colorectal Cancer with k=3
+colorectal_plot <- make_custom_km_plot("Colorectal Cancer", custom_k_values[["Colorectal Cancer"]], 
+                                       clustering_results, genomic_features)
+
+# View the plots
+breast_plot
+lung_plot
+colorectal_plot
+
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tibble)
+
+library(ggplot2)
+library(dplyr)
+
+get_cancer_vimp <- function(cancer_name, results_list) {
+  
+  # 1. Extract importance scores
+  # Use [,1] to ensure we get a single vector even if it's a matrix
+  vimp_raw <- results_list[[cancer_name]]$rsf_model$importance
+  if(is.matrix(vimp_raw)) vimp_raw <- vimp_raw[,1] 
+  
+  # 2. Build data frame explicitly
+  vimp_df <- data.frame(
+    Feature = names(vimp_raw),
+    Importance = as.numeric(vimp_raw),
+    stringsAsFactors = FALSE
+  )
+  
+  # 3. Filter and sort
+  vimp_df <- vimp_df[order(-vimp_df$Importance), ] # Sort descending
+  vimp_df <- head(vimp_df, 10) # Take top 10
+  
+  # 4. Use 'vimp_df$' inside aes() to force R to find the columns
+  ggplot(vimp_df, aes(x = reorder(vimp_df$Feature, vimp_df$Importance), 
+                      y = vimp_df$Importance)) +
+    geom_col(fill = "steelblue") +
+    coord_flip() +
+    theme_minimal() +
+    labs(
+      title = paste("Top 10 Features:", cancer_name),
+      x = "Genomic Feature",
+      y = "Importance Score"
+    )
+}
+
+# Run and Plot
+vimp_plots <- lapply(names(clustering_results), function(ct) {
+  get_cancer_vimp(ct, clustering_results)
+})
+names(vimp_plots) <- names(clustering_results)
+
+# View Breast Cancer VIMP
+vimp_plots[["Breast Cancer"]]
+
 ```
 
 ### **Survival Differences Across RSF-Derived Clusters**
@@ -1143,22 +1370,8 @@ The genomic clusters identified in this study are broadly consistent with patter
 | Genomically quiet aggressive tumors | prostate and pancreatic cancers    |
 
 ```{r}
-mds <- cmdscale(dist_obj, k = 2)
-
-plot(mds,
-     col = genomic_features$cluster,
-     pch = 19,
-     xlab = "Dimension 1",
-     ylab = "Dimension 2")
-
-legend("topright",
-       legend = levels(genomic_features$cluster),
-       col = 1:optimal_k,
-       pch = 19)
-```
-
-```{r}
 library(ggplot2)
+mds <- cmdscale(dist_obj1, k = 2)
 
 plot_df <- data.frame(
   Dim1 = mds[,1],
@@ -1192,13 +1405,31 @@ library(survival)
 
 # Fit the multivariable model
 # This tests: Is Cluster membership still significant AFTER accounting for Age, Sex, etc?
-cox_model <- coxph(Surv(time, event) ~ cluster_k5 + CURRENT_AGE_DEID + GENDER + 
+
+cox_model <- coxph(Surv(time, event) ~ cluster + CURRENT_AGE_DEID + GENDER + 
                    Prior_Meds_Binary + CANCER_TYPE, 
                    data = genomic_features_full)
 
 # View the results
 summary(cox_model)
 
+
+```
+
+```{r}
+# 1. Load the necessary library
+library(survminer)
+
+# 2. Generate the Forest Plot
+# 'cox_model' is your fitted coxph object
+# 'genomic_features_full' is your dataset
+ggforest(
+  model = cox_model, 
+  data = genomic_features_full, 
+  main = "Hazard Ratios for Independent Prognostic Factors", 
+  fontsize = 0.8,    # Adjusts text size for better readability
+  noDigits = 2       # Keeps 2 decimal places for HRs and p-values
+)
 
 ```
 
