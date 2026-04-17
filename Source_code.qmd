@@ -635,107 +635,170 @@ library(survminer)
 ### KM Analysis
 fit <- survfit(Surv(time, event) ~ cluster,
                data = genomic_features)
-
-ggsurvplot(
+km_plot <- ggsurvplot(
   fit,
   data = genomic_features,
   risk.table = TRUE,
   pval = TRUE,
   conf.int = TRUE,
   palette = "Dark2",
+  
+  # Labels
   xlab = "Days from Sequencing",
   ylab = "Metastasis-Free Survival Probability",
-  legend.title = "Genomic Cluster"
+  title = "KM Survival Curves : Cluster 2 has poor metastasis free suvival Probability",
+  
+  ggtheme = theme_minimal(base_size = 14) +
+    theme(
+      plot.title = element_text(size = 13, face = "bold", hjust = 0.5), # centered
+      legend.title = element_text(size = 16, face = "bold"),
+      legend.text  = element_text(size = 16)
+    ),
+  
+  # Improve legend
+  legend.title = "Cluster",
+  legend.labs = levels(genomic_features$cluster),
+  
+  # Risk table styling
+  risk.table.height = 0.25,
+  risk.table.y.text.col = TRUE,
+  risk.table.y.text = FALSE
 )
-
 
 ```
 
 ```{r}
+#Heatmap of Genomic Features by Cluster(main)
 
-cluster_vimp_list <- list()
+library(tibble)
+names(genomic_features)
+gene_summary <- genomic_features %>%
+  group_by(cluster) %>%
+  summarise(across(where(is.numeric), mean))
+gene_matrix <- gene_summary %>%
+  dplyr::select(-time, -event) %>%
+  column_to_rownames("cluster")
 
-set.seed(123)
+library(pheatmap)
+library(patchwork)
+library(grid)
 
-for (cl in levels(genomic_features$cluster)) {
+heat <- pheatmap(
+  t(gene_matrix),
+  scale = "row",
+  clustering_method = "ward.D2",
+  fontsize_row = 6,
+  fontsize_col = 12,
   
-  # Subset data for cluster
-  data_cl <- genomic_features %>%
-    filter(cluster == cl)
+  angle_col = 45,
   
-  # Remove IDs + cluster column
-  rsf_data_cl <- data_cl %>%
-    select(-PATIENT_ID, -SAMPLE_ID, -cluster)
-  
-  # Fit RSF model within cluster
-  rsf_cl <- rfsrc(
-    Surv(time, event) ~ .,
-    data = rsf_data_cl,
-    ntree = 500,
-    importance = "permute"
-  )
-  
-  # Store VIMP
-  cluster_vimp_list[[cl]] <- rsf_cl$importance
-}
-
-library(tidyr)
-
-cluster_vimp_df <- bind_rows(
-  lapply(names(cluster_vimp_list), function(cl) {
-    data.frame(
-      variable = names(cluster_vimp_list[[cl]]),
-      importance = cluster_vimp_list[[cl]],
-      cluster = paste0("Cluster_", cl)
-    )
-  })
+  main = "Genomic Alteration Patterns Across Clusters"
 )
 
-cluster_vimp_df <- cluster_vimp_df %>%
-  group_by(cluster) %>%
-  mutate(norm_importance = importance / max(importance)) %>%
-  ungroup()
+final_plot <- wrap_elements(full = heat$gtable) | km_plot$plot +
+  plot_annotation(
+    title = "Integrated Genomic Clustering and Survival Analysis",
+    theme = theme(plot.title = element_text(size = 20, face = "bold"))
+  )
 
+final_plot
+
+
+ggsave(
+  "genomic_cluster_plot.png",
+  final_plot,
+  width = 14,
+  height = 10,
+  dpi = 300
+)
+```
+
+```{r}
+
+### Multivarable cox regression model and forest plot for Hazard Ratio
+prior_meds <- read.delim("msk_chord_2024_data/data_timeline_prior_meds.txt", comment.char="#")
+head(prior_meds)
+
+prior_meds_new <- prior_meds%>%
+  rename(Prior_Meds_Binary = PRIOR_MED_TO_MSK) %>%
+  mutate(Prior_Meds_Binary = ifelse(Prior_Meds_Binary == "Prior medications to MSK", 1, 0))
+
+prior_meds_new$Prior_Meds_Binary <- as.factor(prior_meds_new$Prior_Meds_Binary)
+
+
+names(clinical_features)
+genomic_features_full <- genomic_features%>%
+  left_join(clinical_features, by = "PATIENT_ID")%>%
+  left_join(prior_meds_new, by = "PATIENT_ID")
+
+genomic_features_full
+
+library(survival)
+
+# Fit the multivariable model
+# This tests: Is Cluster membership still significant AFTER accounting for Age, Sex, etc?
+
+genomic_features_full$CANCER_TYPE <- as.factor(genomic_features_full$CANCER_TYPE)
+genomic_features_full$CANCER_TYPE <- relevel(genomic_features_full$CANCER_TYPE, ref = "Prostate Cancer")
+cox_model <- coxph(Surv(time, event) ~ cluster + CURRENT_AGE_DEID + GENDER + 
+                   Prior_Meds_Binary + CANCER_TYPE, 
+                   data = genomic_features_full)
+
+# View the results
+summary(cox_model)
+{r}
+library(broom)
+library(dplyr)
+
+cox_df <- tidy(cox_model, exponentiate = TRUE, conf.int = TRUE)
+cox_df <- cox_df %>%
+  filter(term != "(Intercept)") %>%
+  mutate(
+    term = gsub("cluster", "Cluster ", term),
+    term = gsub("CURRENT_AGE_DEID", "Age", term),
+    term = gsub("GENDER", "Gender: ", term),
+    term = gsub("Prior_Meds_Binary", "Prior Meds", term),
+    term = gsub("CANCER_TYPE", "Cancer: ", term)
+  )
 
 library(ggplot2)
 
-ggplot(cluster_vimp_df, aes(x = cluster, y = reorder(variable, norm_importance))) +
-  geom_tile(aes(fill = norm_importance)) +
-  # Gradient2 creates the diverging scale
-  scale_fill_gradient2(
-    low = "blue",      # Color for negative VIMP (noise)
-    mid = "white",     # Color for zero VIMP
-    high = "red",      # Color for positive VIMP (importance)
-    midpoint = 0,
-    name = "Normalized VIMP"
-  ) +
-  theme_minimal() +
+coxplot <- ggplot(cox_df, aes(x = estimate, y = term)) +
+  
+  # Confidence intervals
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
+                 height = 0.2, color = "gray40") +
+  
+  # Points (HR)
+  geom_point(aes(color = estimate), size = 3) +
+  
+  # Reference line (HR = 1)
+  geom_vline(xintercept = 1, linetype = "dashed", color = "red") +
+  
+  # Log scale (important for HR)
+  scale_x_log10() +
+  
+  # Color gradient
+  scale_color_gradient(low = "darkgreen", high = "red") +
+  
+  theme_minimal(base_size = 14) +
+  
   labs(
-    title = "Cluster-Specific Variable Importance (RSF)",
-    subtitle = "Blue indicates negative importance (potential noise)",
-    x = "Cluster",
-    y = "Features"
-  )
-```
-
-```{r}
-top_features <- cluster_vimp_df %>%
-  group_by(cluster) %>%
-  slice_max(norm_importance, n = 10) %>%
-  ungroup()
-ggplot(top_features, aes(x = cluster, y = reorder(variable, norm_importance))) +
-  geom_tile(aes(fill = norm_importance)) +
-  scale_fill_gradient(low = "white", high = "blue") +
-  theme_minimal() +
-  labs(
-    title = "Top 10 Important Features per Cluster",
-    x = "Cluster",
-    y = "Features"
-  )
-```
-
-```{r}
-table(genomic_features$cluster, genomic_features$CANCER_TYPE)
+    title = "Multivariable Cox Model: Cluster 2 Is Significantly and Independently Associated with Higher Hazard of Metastasis",
+    x = "Hazard Ratio (log scale)",
+    y = "",
+    color = "HR"
+  )+ theme(
+    plot.title = element_text(size = 15),
+    axis.text.y = element_text(size = 15)
+)
+ggsave(
+  "coxHR_plot.png",
+  coxplot,
+  width = 10,
+  height = 10,
+  dpi = 300
+)
 ```
 
 ```{r}
@@ -744,9 +807,17 @@ table(genomic_features$cluster, genomic_features$CANCER_TYPE)
 
 table(genomic_features$CANCER_TYPE)
 
-
+genomic_features_cluster <- genomic_features %>%
+  mutate(CANCER_TYPE_SIMPLE = case_when(
+    grepl("breast", CANCER_TYPE, ignore.case = TRUE) ~ "Breast",
+    grepl("lung", CANCER_TYPE, ignore.case = TRUE) ~ "Lung",
+    grepl("prostate", CANCER_TYPE, ignore.case = TRUE) ~ "Prostate",
+    grepl("pancreatic", CANCER_TYPE, ignore.case = TRUE) ~ "Pancreatic",
+    grepl("colorectal", CANCER_TYPE, ignore.case = TRUE) ~ "Colorectal",
+    TRUE ~ "Other"
+  ))
 # 1. Create the contingency table
-contingency_table <- table(genomic_features$cluster, genomic_features$CANCER_TYPE)
+contingency_table <- table(genomic_features_cluster$cluster, genomic_features_cluster$CANCER_TYPE_SIMPLE)
 
 # 2. Run Chi-square test
 chi_test <- chisq.test(contingency_table)
@@ -760,15 +831,20 @@ print(std_residuals)
 library(corrplot)
 
 # Use the residuals from your chi-test
+png("cluster_plot.png", width = 3000, height = 3000, res = 300)
+
 corrplot(std_residuals, 
          is.cor = FALSE, 
-         method = "circle", 
-         number.cex = 0.01,       # Adjusts the size of the numbers
-         number.digits = 1,      # Number of decimal places to show
+         method = "circle",
+         number.cex = 0,
+         tl.col = "red",
+         tl.cex = 2.0,
+         cl.pos = "r",
+         cl.cex = 0,
          title = "Cluster vs Cancer Type (Standardized Residuals)",
          mar = c(0,0,2,0))
 
-
+dev.off()
 ```
 
 This plot is a **Pearson Residual Map**, which visually represents the results of your Chi-square test. It tells us exactly which molecular clusters are "driven" by specific cancer types.
@@ -804,15 +880,14 @@ survival plot:
 This adds a massive layer of clinical insight: it suggests that the "Breast Cancer" signature in dataset is significantly more aggressive than the "Colorectal" signature in Cluster 1.
 
 ```{r}
-
-
+### Finding High Prevalent cancer
 # Count patients per cancer type
 cancer_counts <- genomic_features %>%
   group_by(CANCER_TYPE) %>%
   summarise(n_patients = n()) %>%
   arrange(desc(n_patients))
 
-cancer_counts
+kable(cancer_counts)
 ```
 
 ```{r}
@@ -918,8 +993,7 @@ plots <- lapply(names(clustering_results), function(ct) {
 names(plots) <- names(clustering_results)
 
 plots[["Breast Cancer"]]
-plots[["Non-Small Cell Lung Cancer"]]
-plots[["Colorectal Cancer"]]
+
 ```
 
 ![](images/clipboard-2289444558.png)
@@ -936,53 +1010,8 @@ clustering_results[["Colorectal Cancer"]]$vimp
 ```
 
 ```{r}
-get_vimp_df <- function(result, cancer_name) {
-  data.frame(
-    variable = names(result$vimp),
-    importance = result$vimp
-  ) %>%
-    mutate(cancer = cancer_name)
-}
 
-vimp_df <- bind_rows(
-  get_vimp_df(clustering_results[["Breast Cancer"]], "Breast Cancer"),
-  get_vimp_df(clustering_results[["Non-Small Cell Lung Cancer"]], "Lung Cancer"),
-  get_vimp_df(clustering_results[["Colorectal Cancer"]], "Colorectal Cancer")
-)
-```
-
-```{r}
-vimp_df <- vimp_df %>%
-  group_by(cancer) %>%
-  mutate(norm_importance = importance / max(importance)) %>%
-  ungroup()
-```
-
-```{r}
-library(tidyr)
-library(ggplot2)
-
-heatmap_df <- vimp_df %>%
-  select(variable, cancer, norm_importance) %>%
-  pivot_wider(names_from = cancer, values_from = norm_importance, values_fill = 0)
-
-
-heatmap_long <- heatmap_df %>%
-  pivot_longer(-variable, names_to = "cancer", values_to = "importance")
-
-ggplot(heatmap_long, aes(x = cancer, y = reorder(variable, importance), fill = importance)) +
-  geom_tile() +
-  scale_fill_gradient(low = "white", high = "red") +
-  theme_minimal() +
-  labs(
-    title = "Shared and Cancer-Specific Important Features",
-    x = "Cancer Type",
-    y = "Features",
-    fill = "Normalized Importance"
-  ) 
-```
-
-```{r}
+### Within type Clustering - Breast Cancet
 
 breast_data <- genomic_features %>%
   filter(CANCER_TYPE == "Breast Cancer")
@@ -1007,360 +1036,152 @@ dist_obj_b <- as.dist(1 - rsf_model$proximity)
 pam_fit_b <- pam(dist_obj_b, k = 5, diss = TRUE)
 
 breast_data$cluster <- factor(pam_fit_b$clustering)
+
+
+km_fit_breast <- survfit(Surv(time, event) ~ cluster, data = breast_data)
+km_plot_breast <- ggsurvplot(
+  km_fit_breast,
+  data = breast_data,
+  risk.table = TRUE,
+  pval = TRUE,
+  conf.int = TRUE,
+
+  xlab = "Time",
+  ylab = "Overall Survival Probability",
+
+  ggtheme = theme_minimal(base_size = 14) +
+    theme(
+      plot.title = element_text(size = 13, face = "bold", hjust = 0.5),
+      legend.title = element_text(size = 16, face = "bold"),
+      legend.text  = element_text(size = 16)
+    ),
+
+  legend.title = "RSF Clusters",
+  legend.labs = levels(breast_data$cluster)
+)
+
+
 ```
 
 ```{r}
 
+### Breast Cancer Feature Importance
 
-get_cluster_vimp <- function(data, cluster_id) {
+library(randomForestSRC)
+library(dplyr)
+
+vip_list <- list()
+
+for (cl in unique(breast_data$cluster)) {
   
-  cluster_data <- data %>%
-    filter(cluster == cluster_id) %>%
+  cluster_data <- breast_data %>%
+    filter(cluster == cl) %>%
     select(-PATIENT_ID, -SAMPLE_ID, -CANCER_TYPE, -cluster)
   
   set.seed(123)
-  
-  model <- rfsrc(
+  rsf_fit <- rfsrc(
     Surv(time, event) ~ .,
     data = cluster_data,
-    ntree = 1000,
+    ntree = 500,
     importance = "permute"
   )
   
-  vimp <- model$importance
-  
-  data.frame(
-    variable = names(vimp),
-    importance = vimp,
-    cluster = paste0("Cluster ", cluster_id)
+  vip <- data.frame(
+    variable = names(rsf_fit$importance),
+    importance = rsf_fit$importance,
+    cluster = cl
   )
+  
+  vip_list[[as.character(cl)]] <- vip
 }
-vimp_list <- lapply(sort(unique(breast_data$cluster)), function(cl) {
-  get_cluster_vimp(breast_data, cl)
-})
 
-vimp_df <- bind_rows(vimp_list)
+vip_df <- bind_rows(vip_list)
 
-vimp_df <- vimp_df %>%
+vimp_df <- vip_df %>%
   group_by(cluster) %>%
   mutate(norm_importance = importance / max(importance)) %>%
   ungroup()
 
-top_features <- vimp_df %>%
-  group_by(cluster) %>%
-  slice_max(norm_importance, n = 15) %>%
-  ungroup()
 
-library(tidyr)
-library(ggplot2)
-
-heatmap_df <- top_features %>%
+heatmap_df <- vimp_df %>%
   select(variable, cluster, norm_importance) %>%
-  pivot_wider(names_from = cluster, values_from = norm_importance, values_fill = 0)
+  pivot_wider(
+    names_from = cluster,
+    values_from = norm_importance,
+    values_fill = 0
+  )
 
 heatmap_long <- heatmap_df %>%
-  pivot_longer(-variable, names_to = "cluster", values_to = "importance")
+  pivot_longer(
+    -variable,
+    names_to = "cluster",
+    values_to = "importance"
+  )
 
-ggplot(
+top_vars <- heatmap_long %>%
+  group_by(variable) %>%
+  summarise(max_imp = max(importance, na.rm = TRUE)) %>%
+  arrange(desc(max_imp)) %>%
+  slice_head(n = 20) %>%
+  pull(variable)
+
+heatmap_long <- heatmap_long %>%
+  filter(variable %in% top_vars)
+
+var_order <- heatmap_long %>%
+  group_by(variable) %>%
+  summarise(max_imp = max(importance, na.rm = TRUE)) %>%
+  arrange(desc(max_imp)) %>%
+  pull(variable)
+
+heatmap_long$variable <- factor(heatmap_long$variable, levels = var_order)
+
+heat_breast <- ggplot(
   heatmap_long,
   aes(
     x = cluster,
-    y = factor(variable, levels = rev(unique(variable))),
+    y = variable,
     fill = importance
   )
 ) +
   geom_tile() +
-  scale_fill_gradient(low = "white", high = "red") +
+  scale_fill_gradient(low = "white", high = "lightgreen") +
   theme_minimal() +
   labs(
-    title = "Cluster-Specific Variable Importance in Breast Cancer (k = 5)",
+    title = "Cluster-Specific Important Features (RSF)",
     x = "Cluster",
     y = "Features",
     fill = "Normalized Importance"
-  ) +
+  )+
   theme(
-    axis.text.x = element_text(angle = 30, hjust = 1),
-    axis.text.y = element_text(size = 9),
-    plot.title = element_text(face = "bold")
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16),
+    plot.title = element_text(size = 18, face = "bold")
   )
+
+
 ```
 
 ```{r}
+library(patchwork)
 
-get_vimp_df_new <- function(result, cancer_name) {
-  data.frame(
-    variable = names(result$vimp),
-    importance = result$vimp
-  ) %>%
-    mutate(cancer = cancer_name)
-}
-
-vimp_df_new <- bind_rows(
-  get_vimp_df_new(clustering_results[["Breast Cancer"]], "Breast Cancer"),
-  get_vimp_df_new(clustering_results[["Non-Small Cell Lung Cancer"]], "Lung Cancer"),
-  get_vimp_df_new(clustering_results[["Colorectal Cancer"]], "Colorectal Cancer")
-)
-vimp_df_n <- vimp_df_new %>%
-  group_by(cancer) %>%
-  mutate(norm_importance = importance / max(importance)) %>%
-  ungroup()
-
-top_features_new <- vimp_df_n %>%
-  group_by(cancer) %>%
-  #slice_max(norm_importance, n = 30) %>%
-  ungroup()
-
-common_features <- top_features_new %>%
-  group_by(variable) %>%
-  filter(n_distinct(cancer) == 3)
-
-ggplot(common_features, aes(x = reorder(variable, norm_importance), 
-                            y = norm_importance, 
-                            fill = cancer)) +
-  geom_col(position = "dodge") +
-  coord_flip() +
-  theme_minimal() +
-  labs(
-    title = "Common Important Features Across All Cancer Types",
-    x = "Features",
-    y = "Normalized Importance"
+final_plot_breastcancer <-
+  km_plot_breast$plot +
+  heat_breast +
+  plot_layout(ncol = 2) +
+  plot_annotation(
+    title = "Survival Analysis and Top 20 Variable of Imp- Breast Cancer",
+    theme = theme(plot.title = element_text(size = 20, face = "bold"))
   )
-```
 
-```{r}
-ggplot(common_features, aes(x = reorder(variable, norm_importance), 
-                            y = norm_importance, 
-                            fill = cancer)) +
-  geom_col(position = "dodge") +
-  coord_flip() +
-  theme_minimal() +
-  labs(
-    title = "Common Important Features Across All Cancer Types",
-    x = "Features",
-    y = "Normalized Importance"
-  )
-```
-
-```{r}
-ggplot(vimp_df %>% filter(norm_importance > 0.3),
-       aes(x = cancer, y = variable, size = norm_importance, color = cancer)) +
-  geom_point(alpha = 0.7) +
-  theme_minimal() +
-  labs(
-    title = "Feature Importance Across Cancer Types",
-    x = "Cancer Type",
-    y = "Features",
-    size = "Importance"
-  )
-```
-
-```{r}
-# Example: Breast Cancer
-breast_data <- genomic_features %>% 
-  filter(CANCER_TYPE == "Breast Cancer") %>%
-  mutate(cluster = factor(clustering_results[["Breast Cancer"]]$clusters))
-# Create survival object
-surv_obj_b <- Surv(time = breast_data$time, event = breast_data$event)
-
-# Fit KM curves by cluster
-km_fit_b <- survfit(surv_obj_b ~ cluster, data = breast_data)
-ggsurvplot(
-  km_fit_b,
-  data = breast_data,
-  pval = TRUE,          # log-rank p-value
-  conf.int = TRUE,      # confidence intervals
-  risk.table = TRUE,    # number at risk
-  legend.title = "Cluster",
-  palette = "Dark2",
-  title = "Breast Cancer: KM by RSF Cluster"
-)
-```
-
-```{r}
-# Lung Cancer
-lung_data <- genomic_features %>% 
-  filter(CANCER_TYPE == "Non-Small Cell Lung Cancer") %>%
-  mutate(cluster = factor(clustering_results[["Non-Small Cell Lung Cancer"]]$clusters))
-
-lung_surv <- survfit(Surv(time, event) ~ cluster, data = lung_data)
-
-ggsurvplot(lung_surv, data = lung_data, pval = TRUE, conf.int = TRUE, 
-           risk.table = TRUE, legend.title = "Cluster",
-           palette = "Dark2",
-           title = "Lung Cancer: KM by RSF Cluster")
-           
-# Colorectal Cancer
-colorectal_data <- genomic_features %>% 
-  filter(CANCER_TYPE == "Colorectal Cancer") %>%
-  mutate(cluster = factor(clustering_results[["Colorectal Cancer"]]$clusters))
-
-colorectal_surv <- survfit(Surv(time, event) ~ cluster, data = colorectal_data)
-
-ggsurvplot(colorectal_surv, data = colorectal_data, pval = TRUE, conf.int = TRUE, 
-           risk.table = TRUE, legend.title = "Cluster",
-           palette = "Dark2",
-           title = "Colorectal Cancer: KM by RSF Cluster")
-```
-
-```{r}
-library(survminer)
-library(survival)
-
-make_custom_km_plot <- function(cancer_name, custom_k, results_list, original_data) {
-  
-  # 1. Get the distance matrix for this cancer from your previous results
-  # This saves time so you don't have to re-run the Random Forest
-  dist_obj <- results_list[[cancer_name]]$distance
-  
-  # 2. Run PAM clustering with your CUSTOM k
-  pam_fit_custom <- pam(dist_obj, k = custom_k, diss = TRUE)
-  
-  # 3. Subset data and attach the new clusters
-  plot_data <- original_data %>% filter(CANCER_TYPE == cancer_name)
-  plot_data$cluster <- factor(pam_fit_custom$clustering)
-  
-  # 4. Fit Survival Curve
-  km_fit <- survfit(Surv(time, event) ~ cluster, data = plot_data)
-  
-  # 5. Create Plot
-  ggsurvplot(
-    km_fit,
-    data = plot_data,
-    pval = TRUE,
-    conf.int = TRUE,
-    risk.table = TRUE,
-    title = paste(cancer_name, ": Survival (Custom k =", custom_k, ")"),
-    legend.labs = paste0("Cluster ", 1:custom_k),
-    palette = "jco",
-    ggtheme = theme_minimal()
-  )
-}
-
-# Define which k you want for each cancer type
-custom_k_values <- list(
-  "Breast Cancer" = 4,
-  "Non-Small Cell Lung Cancer" = 4,
-  "Colorectal Cancer" = 5
-)
-
-
-# Run for Breast Cancer with k=5
-breast_plot <- make_custom_km_plot("Breast Cancer", custom_k_values[["Breast Cancer"]], 
-                                  clustering_results, genomic_features)
-
-# Run for Lung Cancer with k=4
-lung_plot <- make_custom_km_plot("Non-Small Cell Lung Cancer", custom_k_values[["Non-Small Cell Lung Cancer"]], 
-                                 clustering_results, genomic_features)
-
-# Run for Colorectal Cancer with k=3
-colorectal_plot <- make_custom_km_plot("Colorectal Cancer", custom_k_values[["Colorectal Cancer"]], 
-                                       clustering_results, genomic_features)
-
-# View the plots
-breast_plot
-lung_plot
-colorectal_plot
-
-```
-
-```{r}
-library(ggplot2)
-library(dplyr)
-library(tibble)
-
-library(ggplot2)
-library(dplyr)
-
-get_cancer_vimp <- function(cancer_name, results_list) {
-  
-  # 1. Extract importance scores
-  # Use [,1] to ensure we get a single vector even if it's a matrix
-  vimp_raw <- results_list[[cancer_name]]$rsf_model$importance
-  if(is.matrix(vimp_raw)) vimp_raw <- vimp_raw[,1] 
-  
-  # 2. Build data frame explicitly
-  vimp_df <- data.frame(
-    Feature = names(vimp_raw),
-    Importance = as.numeric(vimp_raw),
-    stringsAsFactors = FALSE
-  )
-  
-  # 3. Filter and sort
-  vimp_df <- vimp_df[order(-vimp_df$Importance), ] # Sort descending
-  vimp_df <- head(vimp_df, 10) # Take top 10
-  
-  # 4. Use 'vimp_df$' inside aes() to force R to find the columns
-  ggplot(vimp_df, aes(x = reorder(vimp_df$Feature, vimp_df$Importance), 
-                      y = vimp_df$Importance)) +
-    geom_col(fill = "steelblue") +
-    coord_flip() +
-    theme_minimal() +
-    labs(
-      title = paste("Top 10 Features:", cancer_name),
-      x = "Genomic Feature",
-      y = "Importance Score"
-    )
-}
-
-# Run and Plot
-vimp_plots <- lapply(names(clustering_results), function(ct) {
-  get_cancer_vimp(ct, clustering_results)
-})
-names(vimp_plots) <- names(clustering_results)
-
-# View Breast Cancer VIMP
-vimp_plots[["Breast Cancer"]]
-
-```
-
-```{r}
-
-```
-
-### **Survival Differences Across RSF-Derived Clusters**
-
-Kaplan–Meier survival analysis was performed to evaluate differences in metastasis-free survival (MFS) across the genomic clusters identified by the Random Survival Forest (RSF) clustering approach. The survival curves demonstrated **clear separation between clusters**, indicating distinct survival patterns among patient groups. A **log-rank test** was conducted to assess statistical significance of these differences, testing the null hypothesis that survival distributions are identical across clusters. The results suggest that the RSF-derived clusters capture **clinically meaningful heterogeneity in patient outcomes**, with some clusters showing **higher MFS probabilities (lower-risk groups)** and others exhibiting **more rapid declines in survival (higher-risk groups)**.
-
-**Logrank test Interpretation**
-
-1.  **Overall Survival Difference:\
-    ** The **log-rank test** (survdiff) shows a **highly significant difference** in survival across the 6 clusters (p \< 0.0001). This means at least one cluster has a survival pattern different from the others.
-
-2.  **Cluster-Specific Observations:**
-
-    -   **Cluster 2:** Observed (946) is **much higher than expected (496)** → **worse survival** than average.
-
-    -   **Cluster 4:** Observed (70) is **much lower than expected (179)** → **better survival** than average.
-
-    -   **Cluster 1 & 5:** Observed events are closer to expected → survival roughly as predicted.
-
-    -   **Clusters 3 & 6:** Moderate deviations, suggesting intermediate survival differences.
-
-3.  **Magnitude of Differences:**
-
-    -   The (O–E)² / E and (O–E)² / V columns highlight **which clusters contribute most to the chi-square statistic**.
-
-    -   Cluster 2 is the **dominant contributor** (largest (O–E)² / E and (O–E)² / V), indicating it is driving most of the overall survival difference.
-
-```{r}
-#Heatmap of Genomic Features by Cluster(main)
-
-library(tibble)
-names(genomic_features)
-gene_summary <- genomic_features %>%
-  group_by(cluster) %>%
-  summarise(across(where(is.numeric), mean))
-gene_matrix <- gene_summary %>%
-  dplyr::select(-time, -event) %>%
-  column_to_rownames("cluster")
-
-library(pheatmap)
-
-pheatmap(
-  gene_matrix,
-  scale = "column",
-  clustering_method = "ward.D2",
-  main = "Genomic Alteration Patterns Across Clusters"
+ggsave(
+  "breast_cluster_plot.png",
+  final_plot_breastcancer,
+  width = 14,
+  height = 10,
+  dpi = 300
 )
 ```
 
@@ -1407,167 +1228,6 @@ The genes on the bottom are grouped by the top dendrogram (the "tree" lines):
 > "To characterize the molecular drivers of each subgroup, we performed hierarchical clustering of genomic alterations across the five clusters. **Cluster 1** exhibited a distinct 'hyper-mutated' phenotype, characterized by high TMB and global CNA burden. In contrast, the high-risk **Cluster 2** demonstrated a relatively low global mutational burden, suggesting its poor prognosis may be mediated by specific oncogenic drivers rather than overall genomic instability."
 
 ```{r}
-#Heatmap of Genomic Features by Cluster(Breast cancer)
-
-library(tibble)
-
-gene_summary_breast <- breast_data %>%
-  group_by(cluster) %>%
-  summarise(across(where(is.numeric), mean))
-gene_matrix_breast <- gene_summary_breast %>%
-  dplyr::select(-time, -event) %>%
-  column_to_rownames("cluster")
-
-library(pheatmap)
-
-pheatmap(
-  gene_matrix,
-  scale = "column",
-  clustering_method = "ward.D2",
-  main = "Genomic Alteration Patterns Across Clusters(Breast Cancer)"
-)
-```
-
-```{r}
-
-prior_meds <- read.delim("msk_chord_2024_data/data_timeline_prior_meds.txt", comment.char="#")
-head(prior_meds)
-
-prior_meds_new <- prior_meds%>%
-  rename(Prior_Meds_Binary = PRIOR_MED_TO_MSK) %>%
-  mutate(Prior_Meds_Binary = ifelse(Prior_Meds_Binary == "Prior medications to MSK", 1, 0))
-
-prior_meds_new$Prior_Meds_Binary <- as.factor(prior_meds_new$Prior_Meds_Binary)
-
-
-names(clinical_features)
-genomic_features_full <- genomic_features%>%
-  left_join(clinical_features, by = "PATIENT_ID")%>%
-  left_join(prior_meds_new, by = "PATIENT_ID")
-
-genomic_features_full
-
-library(tableone)
-
-# Define clinical variables to compare
-clinical_vars <- c("AGE", "GENDER") 
-
-# Create the summary table grouped by your k=5 clusters
-table_summary <- CreateTableOne(
-  vars = clinical_vars, 
-  strata = "cluster_k5", 
-  data = genomic_features_full,
-  factorVars = c("GENDER") # Categorical variables
-)
-
-# View the results with p-values
-print(table_summary, showAllLevels = TRUE, formatOptions = list(big.mark = ","))
-
-# Summarize Age across clusters
-age_summary <- CreateTableOne(vars = "CURRENT_AGE_DEID", strata = "cluster_k5", data = genomic_features_full)
-print(age_summary, nonnormal = "CURRENT_AGE_DEID") # Use nonnormal if age distribution is skewed
-
-# Specifically compare Cluster 1 and Cluster 2 age
-t.test(CURRENT_AGE_DEID ~ cluster_k5, data = subset(genomic_features_full, cluster_k5 %in% c(1, 2)))
-
-
-
-```
-
-"Clinical characterization of the molecular clusters revealed a significant association with patient gender (p\<0.001). **Cluster 2** was predominantly female (92.0%), consistent with its enrichment for Breast Cancer, while **Cluster 5** was almost exclusively male (94.5%), reflecting its Prostate Cancer composition. Clusters 1, 3, and 4 exhibited more balanced gender distributions, aligning with their higher proportions of Lung and Colorectal cancers."
-
-```{r}
-prior_meds <- read.delim("msk_chord_2024_data/data_timeline_prior_meds.txt", comment.char="#")
-head(prior_meds)
-
-prior_meds_new <- prior_meds%>%
-  rename(Prior_Meds_Binary = PRIOR_MED_TO_MSK) %>%
-  mutate(Prior_Meds_Binary = ifelse(Prior_Meds_Binary == "Prior medications to MSK", 1, 0))
-
-prior_meds_new$Prior_Meds_Binary <- as.factor(prior_meds_new$Prior_Meds_Binary)
-
-
-names(clinical_features)
-genomic_features_full <- genomic_features%>%
-  left_join(clinical_features, by = "PATIENT_ID")%>%
-  left_join(prior_meds_new, by = "PATIENT_ID")
-
-genomic_features_full
-
-```
-
-```{r}
-library(survival)
-
-# Fit the multivariable model
-# This tests: Is Cluster membership still significant AFTER accounting for Age, Sex, etc?
-
-genomic_features_full$CANCER_TYPE <- as.factor(genomic_features_full$CANCER_TYPE)
-genomic_features_full$CANCER_TYPE <- relevel(genomic_features_full$CANCER_TYPE, ref = "Prostate Cancer")
-cox_model <- coxph(Surv(time, event) ~ cluster + CURRENT_AGE_DEID + GENDER + 
-                   Prior_Meds_Binary + CANCER_TYPE, 
-                   data = genomic_features_full)
-
-# View the results
-summary(cox_model)
-```
-
-```{r}
-library(broom)
-library(dplyr)
-
-cox_df <- tidy(cox_model, exponentiate = TRUE, conf.int = TRUE)
-cox_df <- cox_df %>%
-  filter(term != "(Intercept)") %>%
-  mutate(
-    term = gsub("cluster", "Cluster ", term),
-    term = gsub("CURRENT_AGE_DEID", "Age", term),
-    term = gsub("GENDER", "Gender: ", term),
-    term = gsub("Prior_Meds_Binary", "Prior Meds", term),
-    term = gsub("CANCER_TYPE", "Cancer: ", term)
-  )
-
-library(ggplot2)
-
-ggplot(cox_df, aes(x = estimate, y = reorder(term, estimate))) +
-  
-  # Confidence intervals
-  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
-                 height = 0.2, color = "gray40") +
-  
-  # Points (HR)
-  geom_point(aes(color = estimate), size = 3) +
-  
-  # Reference line (HR = 1)
-  geom_vline(xintercept = 1, linetype = "dashed", color = "red") +
-  
-  # Log scale (important for HR)
-  scale_x_log10() +
-  
-  # Color gradient
-  scale_color_gradient(low = "blue", high = "darkred") +
-  
-  theme_minimal(base_size = 14) +
-  
-  labs(
-    title = "Multivariable Cox Model: Hazard Ratios",
-    x = "Hazard Ratio (log scale)",
-    y = "",
-    color = "HR"
-  )
-```
-
-The genomic clusters identified in this study are broadly consistent with patterns reported in prior large-scale cancer sequencing efforts. In particular, the PIK3CA-enriched cluster demonstrated favorable metastasis-free survival, consistent with observations in breast and endometrial cancers. The TP53-dominant cluster reflected the genomic instability phenotype commonly observed across multiple tumor types. Additionally, enrichment of APC and KRAS mutations in one cluster corresponds to canonical WNT and MAPK pathway activation reported in colorectal tumorigenesis. Interestingly, we also identified a genomically quiet yet clinically aggressive subtype, a pattern previously described in several malignancies where non-mutational mechanisms may drive metastatic progression.
-
-| Pattern                             | Previously reported in             |
-|-------------------------------------|------------------------------------|
-| PIK3CA-driven tumors                | TCGA breast/endometrial subtypes   |
-| TP53-dominant tumors                | Pan-cancer genomic studies         |
-| APC/KRAS signaling tumors           | colorectal cancer pathways         |
-| Hypermutated tumors                 | MSI or DNA repair deficient tumors |
-| Genomically quiet aggressive tumors | prostate and pancreatic cancers    |
-
-```{r}
 library(ggplot2)
 mds <- cmdscale(dist_obj1, k = 2)
 
@@ -1596,127 +1256,6 @@ ggplot(plot_df, aes(x = Dim1, y = Dim2, color = Cluster)) +
     legend.position = "right"
   )
 ```
-
-```{r}
-### Penalized cox regression
-library(survival)
-
-# Fit the multivariable model
-# This tests: Is Cluster membership still significant AFTER accounting for Age, Sex, etc?
-
-cox_model <- coxph(Surv(time, event) ~ cluster + CURRENT_AGE_DEID + GENDER + 
-                   Prior_Meds_Binary + CANCER_TYPE, 
-                   data = genomic_features_full)
-
-# View the results
-summary(cox_model)
-
-
-```
-
-```{r}
-# 1. Load the necessary library
-library(survminer)
-
-# 2. Generate the Forest Plot
-# 'cox_model' is your fitted coxph object
-# 'genomic_features_full' is your dataset
-ggforest(
-  model = cox_model, 
-  data = genomic_features_full, 
-  main = "Hazard Ratios for Independent Prognostic Factors", 
-  fontsize = 0.8,    # Adjusts text size for better readability
-  noDigits = 2       # Keeps 2 decimal places for HRs and p-values
-)
-
-```
-
-```{r}
-
-### Patient_clusters 
-patient<- genomic_features %>%
-  group_by(cluster) %>%
-  summarise(across(where(is.numeric), mean))
-
-kable(patient)
-
-```
-
-```{r}
-cox_model <- coxph(Surv(time, event) ~ cluster,
-                   data = genomic_features)
-
-summary(cox_model)
-library(survminer)
-
-ggforest(cox_model,
-         data = genomic_features)
-```
-
-```{r}
-# Optional but Very Strong Figure (Genomic Drivers)
-var_imp <- rsf_model$importance
-
-imp_df <- data.frame(
-  Gene = names(var_imp),
-  Importance = as.numeric(var_imp)
-)
-
-
-
-imp_df <- imp_df[order(-imp_df$Importance),]
-
-head(imp_df, 20)
-library(ggplot2)
-
-top20 <- head(imp_df, 20)
-top20
-
-
-ggplot(top20, aes(x=reorder(Gene,Importance), y=Importance)) +
-  geom_bar(stat="identity") +
-  coord_flip() +
-  labs(
-    title="Top Genomic Predictors of Metastasis",
-    x="Gene",
-    y="Variable Importance"
-  )
-```
-
-```{r}
-### Patient_clusters 
-patient_clusters <- patient_features %>%
-  group_by(cluster) %>%
-  summarise(across(where(is.numeric), mean))
-
-kable(patient_clusters)
-```
-
-Cluster 5 likely represents:
-
-KRAS + TP53 + SMAD4 co-altered aggressive phenotype
-
-This pattern is typical of very unstable tumors.
-
-Genomically unstable Strong oncogenic signaling High metastatic potential
-
-# RSF clustering has separated:
-
-cluster5: TP53+KRAS+SMAD4 aggressive subtype
-
-cluster 6: TP53+KRAS-only subtype
-
-cluster3 : TP53-only subtype
-
-cluster4 : KRAS-only subtype
-
-cluster2: Genomically quiet subtype
-
-cluster 1: Intermediate complex subtype
-
-This is biologically meaningful.
-
-This is not random clustering. This reflects oncogenic architecture.
 
 # References
 
