@@ -24,13 +24,17 @@ cBioPortal](https://www.cbioportal.org/study/summary?id=msk_chord_2024)
 
 
 ## Results
-<img width="706" height="392" alt="image" src="https://github.com/user-attachments/assets/f19c7c0b-a32b-4463-b9cb-da7aac10637e" />
+
 <img width="1345" height="637" alt="image" src="https://github.com/user-attachments/assets/664fc7e0-8653-4097-983f-0d7dd6e0a49d" />
 <img width="1873" height="801" alt="image" src="https://github.com/user-attachments/assets/4ce8b8b3-f3e9-4b11-bbd6-86915f4c03b6" />
 <img width="760" height="625" alt="image" src="https://github.com/user-attachments/assets/3d1a6c39-188e-4ad4-858f-6b0fe2821c5b" />
 
-
-Results: The RSF model achieved a C-index of 0.77. Clustering on RSF-derived distances resolved five subtypes with significantly different metastasis-free survival (p < 0.0001). Cluster membership was a strong independent predictor of outcome in Cox regression: Cluster 2, enriched for breast cancer, had the poorest prognosis (HR = 2.22 vs reference Cluster 1) compared to other clusters . VIMP analysis highlighted TP53, GATA3, and ERBB2 as key drivers, providing biological interpretability for the cancer subtypes.
+RSF Model Evaluation : C-index: 0.77;  BrierScore:  0.152(Vs 0.218)
+Identified 5  Clusters (K=5)
+● Distinct genomic profiles
+● Silhouette-based validation 
+● High stability (Mean Jaccard Index = 0.918) and  interpretability
+Clustering on RSF-derived distances resolved five subtypes with significantly different metastasis-free survival (p < 0.0001). Cluster membership was a strong independent predictor of outcome in Cox regression: Cluster 2, enriched for breast cancer, had the poorest prognosis (HR = 2.22 vs reference Cluster 1) compared to other clusters . VIMP analysis highlighted TP53, GATA3, and ERBB2 as key drivers, providing biological interpretability for the cancer subtypes.
 
 
 Conclusion: Clustering on RSF-derived proximities reveals risk groups that are informed by metastasis onset. This pipeline offers a general framework for precision oncology and for identifying high-risk patients who may benefit from intensified therapy.
