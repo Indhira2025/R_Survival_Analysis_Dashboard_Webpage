@@ -39,14 +39,14 @@ Identified 5  Clusters (K=5)\
 Clustering on RSF-derived distances resolved five subtypes with significantly different metastasis-free survival (p < 0.0001). Cluster membership was a strong independent predictor of outcome in Cox regression: Cluster 2, enriched for breast cancer, had the poorest prognosis (HR = 2.22 vs reference Cluster 1) compared to other clusters . VIMP analysis highlighted TP53, GATA3, and ERBB2 as key drivers, providing biological interpretability for the cancer subtypes.\
 Two clusters had immediate clinical implications:\
 -Cluster 2 (Rapid-Progressors): An "ultra-high-risk" phenotype with a 75% risk of spread within 500 days, driven by TP53, ERBB2, and high CNA burden. These findings support aggressive, early intervention.\
--Cluster 4 (The Stable Group): Patients with excellent long-term survival despite "aggressive" cancer types. This reveals a clear opportunity to de-escalate treatment and avoid unnecessary toxicity.\
+-Cluster 4 (The Stable Group): Patients with excellent long-term survival despite "aggressive" cancer types. This reveals a clear opportunity to de-escalate treatment and avoid unnecessary toxicity.
 
-But an interesting and important question was : "How does Cluster 1 — the group with mutations in practically every gene have the best metastasis free survival probability?"\
+But an interesting and important question was : "How does Cluster 1 — the group with mutations in practically every gene have the best metastasis free survival probability?"
 
 Logic suggests that more mutations = "stronger" cancer. However, the data (and literature from Goodman et al.) tells a different story. This "hyper-mutated" state often results in two
 phenomena:\
 Immune Visibility: High mutation counts make the tumor"louder," creating more neoantigens that allow the immune systemto recognize and attack the cancer more effectively.\
-GenomicInstability: Sometimes, a cancer becomes so unstable that it loses its"fitness." The cells are so dysfunctional that they struggle to survive the complex journey required to spread to other organs.\
+GenomicInstability: Sometimes, a cancer becomes so unstable that it loses its"fitness." The cells are so dysfunctional that they struggle to survive the complex journey required to spread to other organs.
 
 This finding highlights why we cannot rely on a single metric. Context is everything.\
  
