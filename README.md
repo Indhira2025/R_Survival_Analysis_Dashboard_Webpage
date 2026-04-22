@@ -24,10 +24,12 @@ cBioPortal](https://www.cbioportal.org/study/summary?id=msk_chord_2024)
 
 
 ## Results
+<img width="1556" height="832" alt="image" src="https://github.com/user-attachments/assets/63c8ec02-e6ed-41db-b2a9-2c69f6a072f7" />
+<img width="656" height="652" alt="image" src="https://github.com/user-attachments/assets/97c04167-0c8e-41b1-bc1f-5be48fe551ab" />
+<img width="647" height="649" alt="image" src="https://github.com/user-attachments/assets/ac9417a1-46bf-4fc5-b2f9-1fe257c454f7" />
+<img width="906" height="651" alt="image" src="https://github.com/user-attachments/assets/750cc05c-5d47-4894-92ae-e0511e67c6be" />
 
-<img width="1345" height="637" alt="image" src="https://github.com/user-attachments/assets/664fc7e0-8653-4097-983f-0d7dd6e0a49d" />
-<img width="1873" height="801" alt="image" src="https://github.com/user-attachments/assets/4ce8b8b3-f3e9-4b11-bbd6-86915f4c03b6" />
-<img width="760" height="625" alt="image" src="https://github.com/user-attachments/assets/3d1a6c39-188e-4ad4-858f-6b0fe2821c5b" />
+
 
 RSF Model Evaluation : C-index: 0.77;  BrierScore:  0.152(Vs 0.218)
 Identified 5  Clusters (K=5)
@@ -35,9 +37,26 @@ Identified 5  Clusters (K=5)
 ● Silhouette-based validation 
 ● High stability (Mean Jaccard Index = 0.918) and  interpretability
 Clustering on RSF-derived distances resolved five subtypes with significantly different metastasis-free survival (p < 0.0001). Cluster membership was a strong independent predictor of outcome in Cox regression: Cluster 2, enriched for breast cancer, had the poorest prognosis (HR = 2.22 vs reference Cluster 1) compared to other clusters . VIMP analysis highlighted TP53, GATA3, and ERBB2 as key drivers, providing biological interpretability for the cancer subtypes.
+Two clusters had immediate clinical implications:
+-Cluster 2 (Rapid-Progressors): An "ultra-high-risk" phenotype with a 75% risk of spread within 500 days, driven by TP53, ERBB2, and high CNA burden. These findings support aggressive, early intervention.
+-Cluster 4 (The Stable Group): Patients with excellent long-term survival despite "aggressive" cancer types. This reveals a clear opportunity to de-escalate treatment and avoid unnecessary toxicity.
+
+But an interesting and important question was : 
+"How does Cluster 1 — the group with mutations in practically every gene have the best metastasis free survival probability?"
+
+Logic suggests that more mutations = "stronger" cancer. However, the data (and literature from Goodman et al.) tells a different story. This "hyper-mutated" state often results in two
+phenomena:
+Immune Visibility: High mutation counts make the tumor"louder," creating more neoantigens that allow the immune systemto recognize and attack the cancer more effectively.
+GenomicInstability: Sometimes, a cancer becomes so unstable that it loses its"fitness." The cells are so dysfunctional that they struggle to survive the complex journey required to spread to other organs.
+
+This finding highlights why we cannot rely on a single metric. Context is everything.
+ 
+## The Impact
+Two patients with the same diagnosis can have completely different genomic stories. This approach helps us catch high-risk cases earlier while sparing stable patients from overtreatment.
 
 
-Conclusion: Clustering on RSF-derived proximities reveals risk groups that are informed by metastasis onset. This pipeline offers a general framework for precision oncology and for identifying high-risk patients who may benefit from intensified therapy.
+## Conclusion 
+Clustering on RSF-derived proximities reveals risk groups that are informed by metastasis onset. This pipeline offers a general framework for precision oncology and for identifying high-risk patients who may benefit from intensified therapy.
 
 
 ## MSK-CHORD Dashboard
