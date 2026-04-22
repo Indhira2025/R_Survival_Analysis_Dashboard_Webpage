@@ -48,7 +48,7 @@ phenomena:\
 Immune Visibility: High mutation counts make the tumor"louder," creating more neoantigens that allow the immune systemto recognize and attack the cancer more effectively.\
 GenomicInstability: Sometimes, a cancer becomes so unstable that it loses its"fitness." The cells are so dysfunctional that they struggle to survive the complex journey required to spread to other organs.
 
-This finding highlights why we cannot rely on a single metric. Context is everything.\
+This finding highlights why we cannot rely on a single metric. Context is everything.
  
 ## The Impact
 Two patients with the same diagnosis can have completely different genomic stories. This approach helps us catch high-risk cases earlier while sparing stable patients from overtreatment.
