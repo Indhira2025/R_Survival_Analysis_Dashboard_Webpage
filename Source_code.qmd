@@ -12,7 +12,7 @@ library(tidyr)
 library(data.table)
 library(survival)
 library(randomForestSRC)
-library(survival)
+library(kableExtra)
 library(cluster)
 #install.packages("pec")
 library(pec)
@@ -20,15 +20,32 @@ library(survminer)
 #library(caret)
 library(pROC)
 
+# Loading the data directly from Github
 
+url_clipat <- paste("https://media.githubusercontent.com/media/cBioPortal/datahub", 
+                    "/refs/heads/master/public/msk_chord_2024/data_clinical_patient.txt",
+                    sep="")
+url_clisamp <- paste("https://media.githubusercontent.com/media/cBioPortal/datahub", 
+                     "/refs/heads/master/public/msk_chord_2024/data_clinical_sample.txt", 
+                     sep="")
+
+url_timediag <- paste("https://media.githubusercontent.com/media/cBioPortal/datahub/refs/heads/master/public/msk_chord_2024/data_timeline_diagnosis.txt", sep="")
+
+
+url_time_progress<- paste("https://media.githubusercontent.com/media/cBioPortal/datahub/refs/heads/master/public/msk_chord_2024/data_timeline_progression.txt", sep ="")
+
+url_mutations <- paste("https://media.githubusercontent.com/media/cBioPortal/datahub/refs/heads/master/public/msk_chord_2024/data_mutations.txt")
+
+url_cna <- "https://github.com/cBioPortal/datahub/raw/master/public/msk_chord_2024/data_cna_hg19.seg"
+
+download.file(url, "data_cna.seg", mode = "wb")
+
+url_prior_meds <- paste("https://media.githubusercontent.com/media/cBioPortal/datahub/refs/heads/master/public/msk_chord_2024/data_timeline_prior_meds.txt")
 
 # Reading the clinical patient data
 
-clinical_patient <- read.delim("msk_chord_2024_data/data_clinical_patient.txt", 
-                   sep = "\t", 
-                   skip = 4,
-                   header = TRUE,
-                   stringsAsFactors = FALSE)
+clinical_patient <- read.delim(url_clipat, comment.char="#", 
+                               stringsAsFactors = TRUE)
 head(clinical_patient)
 
 names(clinical_patient)
@@ -54,7 +71,11 @@ clinical_features
 ```{r}
 
 library(kableExtra)
-clinical_sample <- read.delim("msk_chord_2024_data/data_clinical_sample.txt", comment.char="#")
+#clinical_sample <- read.delim("msk_chord_2024_data/data_clinical_sample.txt", comment.char="#")
+
+
+clinical_sample <- read.delim(url_clisamp, comment.char="#",
+                              stringsAsFactors = TRUE)
 #View(clinical_sample)
 kable(table(clinical_sample$CANCER_TYPE))
 names (clinical_sample)
@@ -85,10 +106,10 @@ table(clinical_sample$CANCER_TYPE)
 names(timeline_diag)
 
 ```{r}
-timeline_diag <-  read.delim2("msk_chord_2024_data/data_timeline_diagnosis.txt", 
-                   header = TRUE, 
-                   sep = "\t", 
-                   stringsAsFactors = FALSE)
+#timeline_diag <-  read.delim2("msk_chord_2024_data/data_timeline_diagnosis.txt",header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+
+timeline_diag <- read.delim(url_timediag, comment.char="#",
+                             stringsAsFactors = TRUE)
 #View(timeline_diag)
 unique(timeline_diag$SUBTYPE)
 names(timeline_diag)
@@ -146,10 +167,10 @@ timeline_diag  %>%
 ```{r}
 
 
-timeline_progress <-  read.delim("msk_chord_2024_data/data_timeline_progression.txt"
-                                , header = TRUE, 
-                                sep = "\t", 
-                                stringsAsFactors = FALSE)
+#timeline_progress <-  read.delim("msk_chord_2024_data/data_timeline_progression.txt", header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+
+timeline_progress <-  read.delim(url_time_progress, comment.char="#",
+                                 stringsAsFactors = TRUE)
 #View(timeline_progress)
 #names(timeline_progress)
 #str(timeline_progress)
@@ -301,10 +322,10 @@ baseline_tmb[baseline_tmb$PATIENT_ID == "P-0000066", ]
 ```{r}
 ### Mutations Block
 
-mutations <- read.delim("msk_chord_2024_data/data_mutations.txt", 
-                   header = TRUE, 
-                   sep = "\t", 
-                   stringsAsFactors = FALSE)
+#mutations <- read.delim("msk_chord_2024_data/data_mutations.txt", header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+
+mutations <- read.delim(url_mutations, comment.char="#", 
+                               stringsAsFactors = TRUE)
 #View(mutations)
 names(mutations)
 unique(mutations$Variant_Classification)
@@ -384,13 +405,18 @@ cna <- read.table("msk_chord_2024_data/data_cna.txt",
                    header = TRUE, 
                    sep = "\t", 
                    stringsAsFactors = FALSE)
+
+
 #View(cna)
 #names(cna)
 
 
 
 library(data.table)
-cna_seg <- fread("msk_chord_2024_data/data_cna_hg19.seg")
+#cna_seg <- fread("msk_chord_2024_data/data_cna_hg19.seg")
+
+
+cna_seg <- fread("data_cna.seg")
 head(cna_seg)
 View(cna_seg)
 names(cna_seg)
@@ -716,7 +742,12 @@ ggsave(
 ```{r}
 
 ### Multivarable cox regression model and forest plot for Hazard Ratio
-prior_meds <- read.delim("msk_chord_2024_data/data_timeline_prior_meds.txt", comment.char="#")
+#prior_meds <- read.delim("msk_chord_2024_data/data_timeline_prior_meds.txt", comment.char="#")
+
+
+
+prior_meds<- read.delim(url_prior_meds, comment.char="#",
+                              stringsAsFactors = TRUE)
 head(prior_meds)
 
 prior_meds_new <- prior_meds%>%
@@ -838,11 +869,14 @@ corrplot(std_residuals,
          method = "circle",
          number.cex = 0,
          tl.col = "red",
-         tl.cex = 2.0,
+         tl.cex = 1.5,
          cl.pos = "r",
          cl.cex = 0,
-         title = "Cluster vs Cancer Type (Standardized Residuals)",
          mar = c(0,0,2,0))
+
+title("Cluster vs Cancer Type (Standardized Residuals)", 
+      cex.main = 1.5,   # 👈 increase size
+      font.main = 2)    # bold
 
 dev.off()
 ```
@@ -853,15 +887,15 @@ The **blue circles** indicate significant **over-representation** (the cluster h
 
 **Key Interpretations from the Plot:**
 
--   **Cluster 2 is the "Breast Cancer" Cluster:** It shows a massive, dark blue circle for Breast Cancer (residual \~50.18). This means the genomic features that define Cluster 2 are almost exclusively found in Breast Cancer patients.
+- **Cluster 2 is the "Breast Cancer" Cluster:** It shows a massive, dark blue circle for Breast Cancer (residual \~50.18). This means the genomic features that define Cluster 2 are almost exclusively found in Breast Cancer patients.
 
--   **Cluster 5 is the "Prostate Cancer" Cluster:** Similarly, Cluster 5 is extremely strongly associated with Prostate Cancer.
+- **Cluster 5 is the "Prostate Cancer" Cluster:** Similarly, Cluster 5 is extremely strongly associated with Prostate Cancer.
 
--   **Cluster 3 is the "Lung Cancer" Cluster:** It is significantly enriched for Non-Small Cell Lung Cancer (NSCLC).
+- **Cluster 3 is the "Lung Cancer" Cluster:** It is significantly enriched for Non-Small Cell Lung Cancer (NSCLC).
 
--   **Clusters 1 and 4 are "Colorectal" Heavy:** These clusters are over-represented in Colorectal Cancer, suggesting that Colorectal Cancer may be splitting into two distinct molecular subtypes (Cluster 1 and Cluster 4).
+- **Clusters 1 and 4 are "Colorectal" Heavy:** These clusters are over-represented in Colorectal Cancer, suggesting that Colorectal Cancer may be splitting into two distinct molecular subtypes (Cluster 1 and Cluster 4).
 
--   **Pancreatic Cancer:** This shows very small, pale circles across all clusters, suggesting it is more "genomically distributed" or has a smaller sample size that doesn't dominate any single cluster.
+- **Pancreatic Cancer:** This shows very small, pale circles across all clusters, suggesting it is more "genomically distributed" or has a smaller sample size that doesn't dominate any single cluster.
 
 **Results Section Draft: Cluster Enrichment**
 
@@ -873,9 +907,9 @@ The **blue circles** indicate significant **over-representation** (the cluster h
 
 survival plot:
 
--   **lowest-surviving group (Cluster 2)** is the **Breast Cancer** enriched group.
+- **lowest-surviving group (Cluster 2)** is the **Breast Cancer** enriched group.
 
--   **highest-surviving group (Cluster 1)** is enriched for **Colorectal Cancer**.
+- **highest-surviving group (Cluster 1)** is enriched for **Colorectal Cancer**.
 
 This adds a massive layer of clinical insight: it suggests that the "Breast Cancer" signature in dataset is significantly more aggressive than the "Colorectal" signature in Cluster 1.
 
@@ -1191,37 +1225,37 @@ Here is a breakdown of how to interpret it for your results:
 
 **1. The "Z-Score" Color Scale**
 
--   **Red (Positive values):** Higher frequency or higher levels of that genomic alteration compared to the average.
+- **Red (Positive values):** Higher frequency or higher levels of that genomic alteration compared to the average.
 
--   **Blue (Negative values):** Lower frequency or absence of that alteration compared to the average.
+- **Blue (Negative values):** Lower frequency or absence of that alteration compared to the average.
 
--   **Yellow/White:** Average levels.
+- **Yellow/White:** Average levels.
 
 **2. Cluster 1: The "High-Burden" Signature**
 
 **Cluster 1** stands out immediately with a solid red row across almost all genes.
 
--   **Interpretation:** This cluster (your largest and best-surviving group) paradoxically has the highest frequency of genomic alterations across the board, including **TMB (Tumor Mutational Burden)** and **CNA burden**.
+- **Interpretation:** This cluster (your largest and best-surviving group) paradoxically has the highest frequency of genomic alterations across the board, including **TMB (Tumor Mutational Burden)** and **CNA burden**.
 
--   **Clinical Insight:** In many cancers, high TMB is associated with a better response to immunotherapy, which might explain why this group has the best survival outcome despite having many mutations.
+- **Clinical Insight:** In many cancers, high TMB is associated with a better response to immunotherapy, which might explain why this group has the best survival outcome despite having many mutations.
 
 **3. Cluster 3 and 2: The "Low-Burden" Signature**
 
 These rows are predominantly blue/cool-toned.
 
--   **Interpretation:** These clusters have significantly *fewer* mutations in the listed genes compared to Cluster 1.
+- **Interpretation:** These clusters have significantly *fewer* mutations in the listed genes compared to Cluster 1.
 
--   **Clinical Insight:** **Cluster 2** was your **highest-risk (lowest survival)** group. The fact that it is "blue" here suggests that its poor prognosis is likely driven by a few specific, aggressive drivers rather than a high overall mutational load.
+- **Clinical Insight:** **Cluster 2** was your **highest-risk (lowest survival)** group. The fact that it is "blue" here suggests that its poor prognosis is likely driven by a few specific, aggressive drivers rather than a high overall mutational load.
 
 **4. Key Gene Markers (The X-Axis)**
 
 The genes on the bottom are grouped by the top dendrogram (the "tree" lines):
 
--   **Druggable Targets:** Look at genes like **EGFR, KRAS, and ERBB2 (HER2)** on the far left. Cluster 4 (yellow/orange) shows higher-than-average levels for some of these, suggesting it might be the "targetable" group.
+- **Druggable Targets:** Look at genes like **EGFR, KRAS, and ERBB2 (HER2)** on the far left. Cluster 4 (yellow/orange) shows higher-than-average levels for some of these, suggesting it might be the "targetable" group.
 
--   **Chromatin Remodelers:** Genes like **ARID1A, KMT2D, and KMT2A** are grouped in the middle.
+- **Chromatin Remodelers:** Genes like **ARID1A, KMT2D, and KMT2A** are grouped in the middle.
 
--   **Specific Drivers:** On the far right, you see **B2M, PIK3CA, and BRCA2**. Cluster 5 shows some slight elevation in these, which correlates with your earlier finding that Cluster 5 is enriched for **Prostate/Breast** cancers.
+- **Specific Drivers:** On the far right, you see **B2M, PIK3CA, and BRCA2**. Cluster 5 shows some slight elevation in these, which correlates with your earlier finding that Cluster 5 is enriched for **Prostate/Breast** cancers.
 
 **5. Summary for your Results Section:**
 
@@ -1293,7 +1327,7 @@ OOB error rates from the RSF were monitored to ensure sufficient forest size and
 
 ### Interpretation:
 
--   Extremely large chi-square statistic p-value essentially 0 Strong evidence that survival differs across clusters RSF-derived clusters are **survival-informative**.
+- Extremely large chi-square statistic p-value essentially 0 Strong evidence that survival differs across clusters RSF-derived clusters are **survival-informative**.
 
 ```{r}
 gene_panel <- read.table("msk_chord_2024_data/data_gene_panel_matrix.txt", 
