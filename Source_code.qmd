@@ -1,24 +1,64 @@
 ---
-title: "MSK_Chorddata_code_project1"
+title: "MSK_Chorddata_code_project"
 format: html
 editor: visual
 ---
 
+[Website link - Click here](https://indhira2025.github.io/R_Survival_Analysis_Dashboard_Webpage/)
+
+```{r}
+#| warning = FALSE,
+#| message = FALSE
+
+
+packages <- c(
+  "dplyr", "tidyr", "broom", "knitr", "data.table",
+  "survival", "randomForestSRC", "cluster", "corrplot",
+  "pec", "survminer", "fpc","tibble","pheatmap","patchwork"
+)
+
+install.packages(setdiff(packages, rownames(installed.packages())))
+
+
+# Load the required libraries 
+
+suppressWarnings({
+  library(dplyr)
+  library(tidyr)
+  library(broom)
+  library(knitr)
+  library(data.table)
+  library(survival)
+  library(randomForestSRC)
+  library(cluster)
+  library(corrplot)
+  library(pec)
+  library(survminer)
+  library(fpc)
+  library(ggplot2)
+  library(tibble)
+  library(pheatmap)
+  library(patchwork)
+})
+
+
+# Package Information 
+pkgs <- c(
+  "fpc", "survminer", "ggplot2", "pec",
+  "corrplot", "cluster", "randomForestSRC",
+  "survival", "data.table", "knitr", "broom",
+  "tidyr", "dplyr"
+)
+
+df <- data.frame(
+  #Package = pkgs,
+  Version = sapply(pkgs, function(x) as.character(packageVersion(x)))
+)
+kable(df, caption = "R Package Versions Used in Analysis")
+```
+
 ```{r}
 
-
-library(dplyr)
-library(tidyr)
-library(data.table)
-library(survival)
-library(randomForestSRC)
-library(kableExtra)
-library(cluster)
-#install.packages("pec")
-library(pec)
-library(survminer)
-#library(caret)
-library(pROC)
 
 # Loading the data directly from Github
 
@@ -38,7 +78,7 @@ url_mutations <- paste("https://media.githubusercontent.com/media/cBioPortal/dat
 
 url_cna <- "https://github.com/cBioPortal/datahub/raw/master/public/msk_chord_2024/data_cna_hg19.seg"
 
-download.file(url, "data_cna.seg", mode = "wb")
+download.file(url_cna, "data_cna.seg", mode = "wb", quiet=TRUE)
 
 url_prior_meds <- paste("https://media.githubusercontent.com/media/cBioPortal/datahub/refs/heads/master/public/msk_chord_2024/data_timeline_prior_meds.txt")
 
@@ -46,15 +86,15 @@ url_prior_meds <- paste("https://media.githubusercontent.com/media/cBioPortal/da
 
 clinical_patient <- read.delim(url_clipat, comment.char="#", 
                                stringsAsFactors = TRUE)
-head(clinical_patient)
+#head(clinical_patient)
 
-names(clinical_patient)
-typeof(clinical_patient)
+#names(clinical_patient)
+#typeof(clinical_patient)
 #str(clinical_patient)
+#clinical_patient[clinical_patient$PATIENT_ID == "P-0001340",]
 
 
-
-clinical_patient[clinical_patient$PATIENT_ID == "P-0001340",]
+#### clinical_patient subset
 clinical_features <- clinical_patient %>%
   dplyr::select(PATIENT_ID,
          GENDER,
@@ -64,57 +104,54 @@ clinical_features <- clinical_patient %>%
          SMOKING_PREDICTIONS_3_CLASSES,
          OS_MONTHS,
          OS_STATUS)
-clinical_features
+#clinical_features
 
 ```
 
 ```{r}
 
-library(kableExtra)
+
 #clinical_sample <- read.delim("msk_chord_2024_data/data_clinical_sample.txt", comment.char="#")
 
 
-clinical_sample <- read.delim(url_clisamp, comment.char="#",
-                              stringsAsFactors = TRUE)
+clinical_sample <- read.delim(url_clisamp, comment.char="#",stringsAsFactors = TRUE)
+
+
 #View(clinical_sample)
-kable(table(clinical_sample$CANCER_TYPE))
-names (clinical_sample)
+#kable(table(clinical_sample$CANCER_TYPE))
+#names (clinical_sample)
 
-length(unique(clinical_sample$PATIENT_ID))
-nrow(clinical_sample)
-
+#length(unique(clinical_sample$PATIENT_ID))
+#nrow(clinical_sample)
 #typeof(clinical_sample)
-table(clinical_sample$SAMPLE_TYPE)
-str(clinical_sample)
-clinical_sample[clinical_sample$PATIENT_ID == "P-0000012",]
-clinical_sample[clinical_sample$PATIENT_ID == "P-0000825",]
-clinical_sample[clinical_sample$PATIENT_ID == "P-0002880",]
+#table(clinical_sample$SAMPLE_TYPE)
+#str(clinical_sample)
 
-clinical_sample[clinical_sample$SAMPLE_TYPE == "Primary", ]
+#clinical_sample[clinical_sample$PATIENT_ID == "P-0000012",]
+#clinical_sample[clinical_sample$PATIENT_ID == "P-0000825",]
+#clinical_sample[clinical_sample$PATIENT_ID == "P-0002880",]
+
+#clinical_sample[clinical_sample$SAMPLE_TYPE == "Primary", ]
 
 ### Viewing multiple samples per patient
 
-sample_counts <- clinical_sample %>%
-  count(PATIENT_ID, name = "n_samples")
+#sample_counts <- clinical_sample %>% count(PATIENT_ID, name = "n_samples")
 
-sample_counts[sample_counts$n_samples == 2,]
+#sample_counts[sample_counts$n_samples == 2,]
 #View(sample_counts)
-table(clinical_sample$CANCER_TYPE)
+kable(table(clinical_sample$CANCER_TYPE))
 
 ```
-
-names(timeline_diag)
 
 ```{r}
 #timeline_diag <-  read.delim2("msk_chord_2024_data/data_timeline_diagnosis.txt",header = TRUE, sep = "\t", stringsAsFactors = FALSE)
 
-timeline_diag <- read.delim(url_timediag, comment.char="#",
-                             stringsAsFactors = TRUE)
+timeline_diag <- read.delim(url_timediag, comment.char="#",stringsAsFactors = TRUE)
 #View(timeline_diag)
 unique(timeline_diag$SUBTYPE)
 names(timeline_diag)
-#unique(timeline_diag$STAGE_CDM_DERIVED)
-#unique(timeline_diag$SUMMARY)
+unique(timeline_diag$STAGE_CDM_DERIVED)
+unique(timeline_diag$SUMMARY)
 #str(timeline_diag)
 
 #If timeline_diag$START_DATE > 0 represents new primary diagnosis after sequencing, then:
@@ -124,25 +161,31 @@ names(timeline_diag)
 timeline_diag %>%
   filter(START_DATE > 0)
 
-## checking
+#checking
 timeline_diag$SUMMARY <- trimws(timeline_diag$SUMMARY)
 timeline_diag[timeline_diag$PATIENT_ID == "P-0000612", ]
 
-## Determine Baseline Stage at Sequencing & Remove Patients Metastatic at Baseline
+#Determine Baseline Stage at Sequencing & Remove Patients Metastatic at Baseline
 non_met_baseline <- timeline_diag %>%
   filter(START_DATE <= 0) %>% # all diagnosis records happened before or at genomic                               #baseline.
   group_by(PATIENT_ID) %>%
   slice_max(START_DATE) %>% #What was the Patient's stage at the time of seqencing?
   filter(STAGE_CDM_DERIVED != "Stage 4" ) %>%
   filter(!SUMMARY %in% c("Distant", "Distant metastases/systemic disease"))
+
+
 #View(baseline_stage)  
 #unique(baseline_stage$SUMMARY)
 
 nrow(non_met_baseline)
 
+
+
 #at-risk cohort
 
 n_distinct(non_met_baseline$PATIENT_ID)
+
+#checkpoint = 14080
 
 timeline_diag  %>%
   group_by(PATIENT_ID) %>%
@@ -169,14 +212,14 @@ timeline_diag  %>%
 
 #timeline_progress <-  read.delim("msk_chord_2024_data/data_timeline_progression.txt", header = TRUE, sep = "\t", stringsAsFactors = FALSE)
 
-timeline_progress <-  read.delim(url_time_progress, comment.char="#",
-                                 stringsAsFactors = TRUE)
+timeline_progress <-  read.delim(url_time_progress, comment.char="#",stringsAsFactors = TRUE)
+
 #View(timeline_progress)
 #names(timeline_progress)
 #str(timeline_progress)
-table(timeline_progress$PROGRESSION)
+#table(timeline_progress$PROGRESSION)
 
-timeline_progress[timeline_progress$PATIENT_ID == "P-0003974", ]
+#timeline_progress[timeline_progress$PATIENT_ID == "P-0003974", ]
 
 
 # patients who cannot be included in a time-to-metastasis analysis because they 
@@ -207,22 +250,23 @@ met_events <- timeline_progress %>%
   summarise(first_met_day = min(START_DATE),
             .groups = "drop")
 #View(met_events)
-nrow(met_events)
+#nrow(met_events)
 
-#================================================================
+#==================================================================
+# This block is not needed as Start time will not be included in the RSF model
 #Extracting Baseline(sequencing time)
 start_time <- timeline_diag %>%
   #filter(PATIENT_ID %in% met_events$PATIENT_ID)%>%
   dplyr::select(PATIENT_ID, START_DATE) %>%
   group_by(PATIENT_ID) %>%
   slice_max(START_DATE, with_ties = FALSE)
-start_time[start_time$PATIENT_ID == "P-0000612", ]
+#start_time[start_time$PATIENT_ID == "P-0000612", ]
 
 #View(start_time)
-nrow(start_time)
-n_distinct(start_time$PATIENT_ID)
-start_time[start_time$START_DATE == 0,]
-start_time[start_time$PATIENT_ID ==  "P-0003523" , ]
+#nrow(start_time)
+#n_distinct(start_time$PATIENT_ID)
+#start_time[start_time$START_DATE == 0,]
+#start_time[start_time$PATIENT_ID ==  "P-0003523" , ]
 #=====================================================================
 
   
@@ -235,8 +279,10 @@ last_followup <- timeline_progress %>%
 
 #View(last_followup)
 
+
 #=========================================================================
 ## Time to metastasis event
+
 ttm_data <- eligible_patients %>%
   #left_join(start_time, by ="PATIENT_ID" )%>%
   left_join(met_events, by = "PATIENT_ID") %>%
@@ -251,14 +297,14 @@ ttm_data <- eligible_patients %>%
         time > 0)   #The latest recorded event for this patient happened before                        #sequencing. we have no post-sequencing follow-up data.
                       #This patient cannot contribute meaningful survival info
 #View(ttm_data)
-summary(ttm_data$time)
-kable(table(ttm_data$event))
-names(ttm_data)
+#summary(ttm_data$time)
+#kable(table(ttm_data$event))
+#names(ttm_data)
 
-sum(ttm_data$time ==  0)
-nrow(ttm_data)
-n_distinct(ttm_data$PATIENT_ID)
-ttm_data[ttm_data$PATIENT_ID == "P-0000612", ]
+#sum(ttm_data$time ==  0)
+#nrow(ttm_data)
+#n_distinct(ttm_data$PATIENT_ID)
+#ttm_data[ttm_data$PATIENT_ID == "P-0000612", ]
 #===============================================================================
 
 analysis_df <- ttm_data %>%
@@ -269,10 +315,10 @@ dplyr::select(PATIENT_ID,first_met_day,last_day, time, event)
 ## last_day = last_day_followup
 ## event = metastasis 1/0
 ## time = if metastasis =1 then time = first_met_day; metastasis =0 then time = last_day_followup
-head(analysis_df)
-names(analysis_df)
-nrow(analysis_df)
-n_distinct(analysis_df$PATIENT_ID)
+#head(analysis_df)
+#names(analysis_df)
+nrow(analysis_df) # 7930
+n_distinct(analysis_df$PATIENT_ID) # 7930
 ```
 
 ```{r}
@@ -287,13 +333,13 @@ baseline_tmb_check <- clinical_sample %>%
   filter(SAMPLE_TYPE == "Primary")%>%
   dplyr::select(SAMPLE_ID,PATIENT_ID, SAMPLE_TYPE,  PRIMARY_SITE, TMB_NONSYNONYMOUS)
 ## Patients with 2 primary tumors
-baseline_tmb_check[baseline_tmb_check$PATIENT_ID == "P-0002880",]
-baseline_tmb_check[baseline_tmb_check$PATIENT_ID == "P-0004121",]
-baseline_tmb_check[baseline_tmb_check$PATIENT_ID == "P-0005813",]
+#baseline_tmb_check[baseline_tmb_check$PATIENT_ID == "P-0002880",]
+#baseline_tmb_check[baseline_tmb_check$PATIENT_ID == "P-0004121",]
+#baseline_tmb_check[baseline_tmb_check$PATIENT_ID == "P-0005813",]
 
 ## patient with 1 primary and 1 metastaic tumor sampled
 
-clinical_sample[clinical_sample$PATIENT_ID== "P-0000012",]
+#clinical_sample[clinical_sample$PATIENT_ID== "P-0000012",]
 
 ### tmb df = ## Filter only primary sample type in clinical_sample
 ## if there are 2 primary tumor samples pull the first sampled tumor's tmb
@@ -308,12 +354,12 @@ baseline_tmb <- clinical_sample %>%
 tmb_df <- baseline_tmb  %>%
   filter(PATIENT_ID %in% ttm_data$PATIENT_ID)
   
-nrow(tmb_df)
-length(tmb_df$PATIENT_ID)
-length(unique(tmb_df$PATIENT_ID))
+nrow(tmb_df) #6655
+#length(tmb_df$PATIENT_ID)
+#length(unique(tmb_df$PATIENT_ID))
 
 
-baseline_tmb[baseline_tmb$PATIENT_ID == "P-0000066", ]
+#baseline_tmb[baseline_tmb$PATIENT_ID == "P-0000066", ]
 
 
 
@@ -327,10 +373,10 @@ baseline_tmb[baseline_tmb$PATIENT_ID == "P-0000066", ]
 mutations <- read.delim(url_mutations, comment.char="#", 
                                stringsAsFactors = TRUE)
 #View(mutations)
-names(mutations)
-unique(mutations$Variant_Classification)
-mutations[mutations$Tumor_Sample_Barcode == "P-0000012-T03-IM3",]
-mutations[mutations$Tumor_Sample_Barcode == "P-0000012-T02-IM3",]
+#names(mutations)
+#unique(mutations$Variant_Classification)
+#mutations[mutations$Tumor_Sample_Barcode == "P-0000012-T03-IM3",]
+#mutations[mutations$Tumor_Sample_Barcode == "P-0000012-T02-IM3",]
 
 ## Mapping tumor barcode sample ID to patient ID byTumor_Sample_Barcode
 
@@ -338,12 +384,12 @@ mutations_clini_merged <- mutations %>%
   left_join(clinical_sample %>% dplyr:: select(Tumor_Sample_Barcode = SAMPLE_ID, PATIENT_ID, SAMPLE_TYPE ),
             by = "Tumor_Sample_Barcode")%>%
   filter(Tumor_Sample_Barcode %in% baseline_tmb$SAMPLE_ID) # only keep tumor sample sampled from primary tumor
-unique(mutations_clini_merged$SAMPLE_TYPE) ## check haiving only primary tumor type
-length(unique(mutations_clini_merged$Tumor_Sample_Barcode))
+#unique(mutations_clini_merged$SAMPLE_TYPE) ## check haiving only primary tumor type
+#length(unique(mutations_clini_merged$Tumor_Sample_Barcode))
 
-length(unique(mutations_clini_merged$Hugo_Symbol)) 
-names(mutations_clini_merged)
-nrow ((mutations_clini_merged)) 
+#length(unique(mutations_clini_merged$Hugo_Symbol)) 
+#names(mutations_clini_merged)
+#nrow ((mutations_clini_merged)) 
 
 
 # Filter mutations for eligible patients
@@ -371,7 +417,7 @@ nonsynonymous_classes <- c(
 mutations_eligible_ns <- mutations_eligible %>%
   filter(Variant_Classification %in% nonsynonymous_classes)
 
-mutations_eligible_ns
+#mutations_eligible_ns
 
   
 # selecting top 50 mutated genes
@@ -379,7 +425,7 @@ top_genes <- mutations_eligible_ns %>%
   count(Hugo_Symbol, sort = TRUE) %>%
   slice_head(n = 50) %>%
   pull(Hugo_Symbol)
-top_genes
+#top_genes
 
 ### Created a Binary Matrix
 mutation_matrix <- mutations_eligible_ns %>%
@@ -392,8 +438,8 @@ mutation_matrix <- mutations_eligible_ns %>%
     values_fill = 0
   )
 #View(mutation_matrix)
-nrow(mutation_matrix)
-names(mutation_matrix)
+nrow(mutation_matrix) #5878
+#names(mutation_matrix)
 
 ```
 
@@ -401,25 +447,14 @@ names(mutation_matrix)
 
 ## Copy number alterations 
 
-cna <- read.table("msk_chord_2024_data/data_cna.txt", 
-                   header = TRUE, 
-                   sep = "\t", 
-                   stringsAsFactors = FALSE)
 
-
-#View(cna)
-#names(cna)
-
-
-
-library(data.table)
 #cna_seg <- fread("msk_chord_2024_data/data_cna_hg19.seg")
 
 
 cna_seg <- fread("data_cna.seg")
-head(cna_seg)
-View(cna_seg)
-names(cna_seg)
+#head(cna_seg)
+#View(cna_seg)
+#names(cna_seg)
 
 
 #Mapping ID to Patient ID
@@ -451,12 +486,14 @@ cna_burden <- cna_eligible %>%
 cna_patients <- cna_burden %>%
   dplyr::select (PATIENT_ID, global_cna_burden)
 
-nrow(cna_burden)
-length(unique(cna_burden$PATIENT_ID))
-length(unique(cna_burden$ID))
+#nrow(cna_burden)
+#length(unique(cna_burden$PATIENT_ID))
+#length(unique(cna_burden$ID))
 ```
 
 ```{r}
+
+# Extracting Cancer type info from Clinical_sample
 
 patient_cancer_type <- clinical_sample %>%
   group_by(PATIENT_ID) %>%
@@ -482,15 +519,15 @@ genomic_features[is.na(genomic_features)] <- 0
 
 #View(analysis_df)
 
-kable(table(genomic_features$event))
+kable(table(genomic_features$event)) # 0: 4401; 1:3529
 
 ###==================Final table for RFS analysis=====================
 #View(genomic_features)
-names(genomic_features)
+#names(genomic_features)
 
-nrow(genomic_features)
-n_distinct(analysis_df$PATIENT_ID)
-genomic_features[genomic_features$time == 0,]
+#nrow(genomic_features)
+#n_distinct(analysis_df$PATIENT_ID)
+#genomic_features[genomic_features$time == 0,]
 
 ####======================================================================
 
@@ -500,10 +537,6 @@ genomic_features[genomic_features$time == 0,]
 
 #RSF Clustering with Cancertype and genomic features
 
-library(randomForestSRC)
-library(survival)
-library(dplyr)
-library(cluster)
 
 # Create survival object
 surv_obj <- Surv(time = genomic_features$time, event = genomic_features$event)
@@ -530,29 +563,16 @@ prox_matrix1 <- rsf_model_type$proximity
 dist_matrix1 <- 1 - prox_matrix1
 dist_obj1 <- as.dist(dist_matrix1)
 
-# Determine optimal number of clusters (Silhouette method)
-sil_width1 <- c()
-for (k in 2:15) {
-  pam_fit1 <- pam(dist_obj1, k = k, diss = TRUE)
-  sil_width1[k] <- pam_fit1$silinfo$avg.width
-}
 
-plot(2:15, sil_width1[2:15], type = "b",
-     xlab = "Number of clusters",
-     ylab = "Average Silhouette Width")
-
-optimal_k1 <- which.max(sil_width1)
-optimal_k1
 
 ```
 
 ```{r}
 ##RSF Model Evaluation
 
-library(survival)
-library(pec)
-library(timeROC)
-library(riskRegression)
+
+#library(timeROC)
+
 
 # --- 1. C-index ---
 c_index <- concordance(
@@ -572,29 +592,44 @@ brier <- pec(
 plot(brier, main = "Brier Score over Time")
 print(crps(brier))  # Integrated Brier Score
 
-# --- 3. Time-dependent AUC ---
-rsf_pred <- rsf_model_type$predicted  # verify interpretation!
+# --- 3. Time-dependent AUC ---====================================================
+#rsf_pred <- rsf_model_type$predicted  # verify interpretation!
 
-time_points <- c(12, 24, 36)
+#time_points <- c(12, 24, 36)
 
-roc <- timeROC(
-  T = rsf_data_type$time,
-  delta = rsf_data_type$event,
-  marker = rsf_pred,
-  cause = 1,
-  times = time_points,
-  iid = TRUE
-)
+#roc <- timeROC(
+  #T = rsf_data_type$time,
+  #delta = rsf_data_type$event,
+  #marker = rsf_pred,
+  #cause = 1,
+  #times = time_points,
+  #iid = TRUE
+#)
 
-for (i in 1:length(time_points)) {
-  cat("AUC at", time_points[i], ":", round(roc$AUC[i], 3), "\n")
-}
+#for (i in 1:length(time_points)) {
+#  cat("AUC at", time_points[i], ":", round(roc$AUC[i], 3), "\n")
+#}
 ```
 
 ```{r}
-library(fpc)
-library(cluster)
 
+
+# Determine optimal number of clusters (Silhouette method)
+sil_width1 <- c()
+for (k in 2:15) {
+  pam_fit1 <- pam(dist_obj1, k = k, diss = TRUE)
+  sil_width1[k] <- pam_fit1$silinfo$avg.width
+}
+
+plot(2:15, sil_width1[2:15], type = "b",
+     xlab = "Number of clusters",
+     ylab = "Average Silhouette Width")
+
+
+
+```
+
+```{r}
 ###Cluster Stabilty Analysis
 
 
@@ -604,14 +639,18 @@ dist_matrix2 <- as.dist(1 - prox_matrix1)
 stability_results <- list()
 
 for (k in 2:10) {
-  boot <- clusterboot(
-    dist_matrix2,
-    B = 100,                    # 100 bootstrap iterations
-    bootmethod = "boot",
-    clustermethod = disthclustCBI,
-    method = "ward.D2",
-    k = k,
-    seed = 42
+  boot <- suppressMessages(
+    invisible(
+      clusterboot(
+        dist_matrix2,
+        B = 100,
+        bootmethod = "boot",
+        clustermethod = disthclustCBI,
+        method = "ward.D2",
+        k = k,
+        seed = 42
+      )
+    )
   )
   
   stability_results[[k]] <- data.frame(
@@ -626,9 +665,9 @@ stability_df <- do.call(rbind, stability_results)
 print(stability_df)
 ```
 
-"Cluster stability analysis using 100 bootstrap iterations confirmed that K=5 provided a highly stable solution (Mean Jaccard Index = **0.918**), whereas higher cluster counts (e.g., K=6 or 10) resulted in a significant reduction in stability and the emergence of poorly defined subgroups."
-
 ![](images/clipboard-2431664736.png)
+
+Cluster stability analysis using 100 bootstrap iterations confirmed that K=5 provided a highly stable solution (Mean Jaccard Index = **0.918**), whereas higher cluster counts (e.g., K=6 or 10) resulted in a significant reduction in stability and the emergence of poorly defined subgroups.
 
 ```{r}
 #Final Clustering (PAM)
@@ -651,13 +690,10 @@ genomic_features$cluster <- factor(pam_final$clustering)
 ###Are survival (time-to-metastasis) curves different across clusters?
 
 
-survdiff(Surv(time, event) ~ cluster,
-         data = genomic_features)
+#survdiff(Surv(time, event) ~ cluster,data = genomic_features)
 
 
-#install.packages("survminer")
 
-library(survminer)
 ### KM Analysis
 fit <- survfit(Surv(time, event) ~ cluster,
                data = genomic_features)
@@ -696,8 +732,7 @@ km_plot <- ggsurvplot(
 ```{r}
 #Heatmap of Genomic Features by Cluster(main)
 
-library(tibble)
-names(genomic_features)
+#names(genomic_features)
 gene_summary <- genomic_features %>%
   group_by(cluster) %>%
   summarise(across(where(is.numeric), mean))
@@ -705,9 +740,7 @@ gene_matrix <- gene_summary %>%
   dplyr::select(-time, -event) %>%
   column_to_rownames("cluster")
 
-library(pheatmap)
-library(patchwork)
-library(grid)
+
 
 heat <- pheatmap(
   t(gene_matrix),
@@ -730,14 +763,10 @@ final_plot <- wrap_elements(full = heat$gtable) | km_plot$plot +
 final_plot
 
 
-ggsave(
-  "genomic_cluster_plot.png",
-  final_plot,
-  width = 14,
-  height = 10,
-  dpi = 300
-)
+#ggsave("genomic_cluster_plot.png",final_plot,width = 14,height = 10,dpi = 300)
 ```
+
+This figure demonstrates that genomic alteration patterns vary distinctly across the identified clusters and are closely associated with differences in metastasis-free survival outcomes. The heatmap on the left shows cluster-specific genomic alteration profiles, with clear stratification of gene-level alterations and hierarchical grouping that suggests biologically coherent tumor subtypes. The Kaplan–Meier curves on the right further reveal that these molecular clusters translate into significantly different clinical trajectories (p \< 0.0001), where Cluster 2 exhibits the poorest metastasis-free survival, indicating a higher risk of disease progression, while other clusters, particularly Clusters 1 and 5, show comparatively better survival outcomes. Overall, these results highlight that the genomic clustering captures meaningful biological heterogeneity that has strong prognostic implications for metastasis risk
 
 ```{r}
 
@@ -745,10 +774,9 @@ ggsave(
 #prior_meds <- read.delim("msk_chord_2024_data/data_timeline_prior_meds.txt", comment.char="#")
 
 
-
 prior_meds<- read.delim(url_prior_meds, comment.char="#",
                               stringsAsFactors = TRUE)
-head(prior_meds)
+#head(prior_meds)
 
 prior_meds_new <- prior_meds%>%
   rename(Prior_Meds_Binary = PRIOR_MED_TO_MSK) %>%
@@ -762,9 +790,12 @@ genomic_features_full <- genomic_features%>%
   left_join(clinical_features, by = "PATIENT_ID")%>%
   left_join(prior_meds_new, by = "PATIENT_ID")
 
-genomic_features_full
+genomic_features_full$GENDER <- droplevels(genomic_features_full$GENDER)
+#levels(genomic_features_full$GENDER)
 
-library(survival)
+#levels(genomic_features_full$cluster)
+
+
 
 # Fit the multivariable model
 # This tests: Is Cluster membership still significant AFTER accounting for Age, Sex, etc?
@@ -777,9 +808,7 @@ cox_model <- coxph(Surv(time, event) ~ cluster + CURRENT_AGE_DEID + GENDER +
 
 # View the results
 summary(cox_model)
-{r}
-library(broom)
-library(dplyr)
+
 
 cox_df <- tidy(cox_model, exponentiate = TRUE, conf.int = TRUE)
 cox_df <- cox_df %>%
@@ -792,24 +821,22 @@ cox_df <- cox_df %>%
     term = gsub("CANCER_TYPE", "Cancer: ", term)
   )
 
-library(ggplot2)
+
 
 coxplot <- ggplot(cox_df, aes(x = estimate, y = term)) +
   
-  # Confidence intervals
-  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
-                 height = 0.2, color = "gray40") +
+  geom_errorbar(
+    aes(xmin = conf.low, xmax = conf.high),
+    orientation = "y",
+    height = 0.2,
+    color = "gray40"
+  ) +
   
-  # Points (HR)
   geom_point(aes(color = estimate), size = 3) +
   
-  # Reference line (HR = 1)
   geom_vline(xintercept = 1, linetype = "dashed", color = "red") +
   
-  # Log scale (important for HR)
   scale_x_log10() +
-  
-  # Color gradient
   scale_color_gradient(low = "darkgreen", high = "red") +
   
   theme_minimal(base_size = 14) +
@@ -819,24 +846,22 @@ coxplot <- ggplot(cox_df, aes(x = estimate, y = term)) +
     x = "Hazard Ratio (log scale)",
     y = "",
     color = "HR"
-  )+ theme(
+  ) +
+  theme(
     plot.title = element_text(size = 15),
     axis.text.y = element_text(size = 15)
-)
-ggsave(
-  "coxHR_plot.png",
-  coxplot,
-  width = 10,
-  height = 10,
-  dpi = 300
-)
+  )
+coxplot
+#ggsave("coxHR_plot.png",coxplot,width = 10,height = 10,dpi = 300)
 ```
+
+This Cox proportional hazards model shows that both molecular clusters and clinical covariates are significantly associated with survival outcomes. Compared to the reference group (Cluster 1), all other clusters exhibit higher hazard of the event: Cluster 2 shows the strongest effect with more than a two-fold increase in risk (HR = 2.22, p \< 2e-16), followed by Cluster 4 (HR = 1.47), Cluster 5 (HR = 1.40), and Cluster 3 (HR = 1.25), indicating progressively elevated risk across molecular subgroups. Among clinical variables, prior medication use is a strong predictor of worse survival (HR = 2.14, p \< 2e-16), suggesting substantial baseline risk differences in this group. Male gender is also associated with a modest but significant increase in hazard (HR = 1.16, p = 0.0007). Cancer type shows strong heterogeneity: pancreatic cancer is associated with the highest risk (HR = 3.09, p \< 2e-16), followed by non-small cell lung cancer (HR = 1.64, p \< 0.001), while breast and colorectal cancers are not statistically significant compared to the reference prostate cancer type. Age is not significantly associated with survival in this model. Overall model performance is moderate-to-good (concordance = 0.679), and the highly significant global tests (likelihood ratio, Wald, and score tests; all p \< 2e-16) confirm that the included variables collectively provide strong prognostic information for survival.
 
 ```{r}
 #Cluster Association Analysis
 
 
-table(genomic_features$CANCER_TYPE)
+#table(genomic_features$CANCER_TYPE)
 
 genomic_features_cluster <- genomic_features %>%
   mutate(CANCER_TYPE_SIMPLE = case_when(
@@ -859,10 +884,10 @@ std_residuals <- chi_test$stdres
 print(std_residuals)
 
 # 4. Optional: Visualize with a Mosaic Plot or Heatmap
-library(corrplot)
+
 
 # Use the residuals from your chi-test
-png("cluster_plot.png", width = 3000, height = 3000, res = 300)
+#png("cluster_plot.png", width = 3000, height = 3000, res = 300)
 
 corrplot(std_residuals, 
          is.cor = FALSE, 
@@ -878,40 +903,24 @@ title("Cluster vs Cancer Type (Standardized Residuals)",
       cex.main = 1.5,   # 👈 increase size
       font.main = 2)    # bold
 
-dev.off()
+#dev.off()
 ```
 
-This plot is a **Pearson Residual Map**, which visually represents the results of your Chi-square test. It tells us exactly which molecular clusters are "driven" by specific cancer types.
-
-The **blue circles** indicate significant **over-representation** (the cluster has more of that cancer type than expected by chance), while **red/orange circles** indicate **under-representation**.
-
-**Key Interpretations from the Plot:**
-
-- **Cluster 2 is the "Breast Cancer" Cluster:** It shows a massive, dark blue circle for Breast Cancer (residual \~50.18). This means the genomic features that define Cluster 2 are almost exclusively found in Breast Cancer patients.
-
-- **Cluster 5 is the "Prostate Cancer" Cluster:** Similarly, Cluster 5 is extremely strongly associated with Prostate Cancer.
-
-- **Cluster 3 is the "Lung Cancer" Cluster:** It is significantly enriched for Non-Small Cell Lung Cancer (NSCLC).
-
-- **Clusters 1 and 4 are "Colorectal" Heavy:** These clusters are over-represented in Colorectal Cancer, suggesting that Colorectal Cancer may be splitting into two distinct molecular subtypes (Cluster 1 and Cluster 4).
-
-- **Pancreatic Cancer:** This shows very small, pale circles across all clusters, suggesting it is more "genomically distributed" or has a smaller sample size that doesn't dominate any single cluster.
-
-**Results Section Draft: Cluster Enrichment**
-
-> "To determine the biological composition of the identified subgroups, we analyzed the association between molecular clusters and primary cancer types using Pearson residuals. The analysis revealed highly significant tissue-specific enrichment ().
+> **Results Section Draft: Cluster Enrichment**
+>
+> To determine the biological composition of the identified subgroups, we analyzed the association between molecular clusters and primary cancer types using Pearson residuals. The analysis revealed highly significant tissue-specific enrichment
+>
+> This plot shows the association between molecular **clusters (rows)** and **cancer types (columns)** using **standardized residuals from a chi-square test of independence**. Each circle represents how much a specific cluster–cancer type pair deviates from what would be expected if there were no relationship; larger and darker circles indicate stronger deviations.
 >
 > **Cluster 2 and Cluster 5** demonstrated the strongest tissue specificity, being almost exclusively over-represented in **Breast Cancer** and **Prostate Cancer**, respectively. **Cluster 3** was significantly enriched for **Non-Small Cell Lung Cancer**, while **Colorectal Cancer** cases were primarily distributed between **Clusters 1 and 4**. These results indicate that while some genomic features are shared across tissues, the clustering remains strongly influenced by the primary site of the tumor."
 
 **Connecting to Survival:**
 
-survival plot:
-
 - **lowest-surviving group (Cluster 2)** is the **Breast Cancer** enriched group.
 
 - **highest-surviving group (Cluster 1)** is enriched for **Colorectal Cancer**.
 
-This adds a massive layer of clinical insight: it suggests that the "Breast Cancer" signature in dataset is significantly more aggressive than the "Colorectal" signature in Cluster 1.
+it suggests that the "Breast Cancer" signature in dataset is significantly more aggressive than the "Colorectal" signature in Cluster 1.
 
 ```{r}
 ### Finding High Prevalent cancer
@@ -924,14 +933,11 @@ cancer_counts <- genomic_features %>%
 kable(cancer_counts)
 ```
 
+# Within type Cluster Analysis - Breast Cancer
+
 ```{r}
 
 #Within- Cancer Type Clustering for high prevalence cancers
-
-library(randomForestSRC)
-library(cluster)
-library(dplyr)
-library(survival)
 
 run_rsf_clustering <- function(data, cancer_type, ntree = 1000, k_range = 2:15) {
   
@@ -999,9 +1005,9 @@ clustering_results <- lapply(high_prev, function(ct) {
 names(clustering_results) <- high_prev
 
 # Example: Breast Cancer
-clustering_results[["Breast Cancer"]]$optimal_k
-clustering_results[["Non-Small Cell Lung Cancer"]]$optimal_k
-clustering_results[["Colorectal Cancer"]]$optimal_k
+#clustering_results[["Breast Cancer"]]$optimal_k
+#clustering_results[["Non-Small Cell Lung Cancer"]]$optimal_k
+#clustering_results[["Colorectal Cancer"]]$optimal_k
 
 
 plot_silhouette <- function(result, cancer_name) {
@@ -1030,17 +1036,17 @@ plots[["Breast Cancer"]]
 
 ```
 
-![](images/clipboard-2289444558.png)
+Although silhouette analysis reached a global maximum at K=5, we selected K=5 for our final model. This decision was driven by the need for biological interpretability; K=5 corresponds to the five well-characterized intrinsic molecular subtypes of breast cancer. Furthermore, K=5 represents a critical point where cluster cohesion significantly improves without leading to the excessive fragmentation or overfitting associated with higher K values.
 
 ```{r}
 # Breast Cancer VIMP
-clustering_results[["Breast Cancer"]]$vimp
+#clustering_results[["Breast Cancer"]]$vimp
 
 # Lung Cancer VIMP
-clustering_results[["Non-Small Cell Lung Cancer"]]$vimp
+#clustering_results[["Non-Small Cell Lung Cancer"]]$vimp
 
 # Colorectal Cancer VIMP
-clustering_results[["Colorectal Cancer"]]$vimp
+#clustering_results[["Colorectal Cancer"]]$vimp
 ```
 
 ```{r}
@@ -1081,7 +1087,7 @@ km_plot_breast <- ggsurvplot(
   conf.int = TRUE,
 
   xlab = "Time",
-  ylab = "Overall Survival Probability",
+  ylab = "Metastatsis free Survival Probability",
 
   ggtheme = theme_minimal(base_size = 14) +
     theme(
@@ -1094,7 +1100,7 @@ km_plot_breast <- ggsurvplot(
   legend.labs = levels(breast_data$cluster)
 )
 
-
+#km_plot_breast
 ```
 
 ```{r}
@@ -1195,7 +1201,7 @@ heat_breast <- ggplot(
     plot.title = element_text(size = 18, face = "bold")
   )
 
-
+#heat_breast
 ```
 
 ```{r}
@@ -1206,90 +1212,38 @@ final_plot_breastcancer <-
   heat_breast +
   plot_layout(ncol = 2) +
   plot_annotation(
-    title = "Survival Analysis and Top 20 Variable of Imp- Breast Cancer",
+    title = "KM Survival curves and Top 20 Variable of Imp- Breast Cancer",
     theme = theme(plot.title = element_text(size = 20, face = "bold"))
   )
-
-ggsave(
-  "breast_cluster_plot.png",
-  final_plot_breastcancer,
-  width = 14,
-  height = 10,
-  dpi = 300
-)
+final_plot_breastcancer
+#ggsave("breast_cluster_plot.png",final_plot_breastcancer,width = 14, height = 10,dpi = 300)
 ```
 
-This heatmap is **a Genomic Signature Map**. It visualizes how specific genetic mutations, copy number alterations (CNA), and tumor mutational burden (TMB) vary across your 5 identified clusters.
+## Kaplan-Meier (KM) Survival Curves
 
-Here is a breakdown of how to interpret it for your results:
+The plot on the left illustrates **Metastasis-free Survival Probability** over time for five distinct patient clusters.
 
-**1. The "Z-Score" Color Scale**
+- **Significant Differentiation:** The $p < 0.0001$ indicates a highly statistically significant difference in survival between the clusters.
 
-- **Red (Positive values):** Higher frequency or higher levels of that genomic alteration compared to the average.
+- **Best vs. Worst Outcomes:** \* **Cluster 4 (Blue):** Shows the highest survival probability, maintaining a high plateau for the longest duration.
 
-- **Blue (Negative values):** Lower frequency or absence of that alteration compared to the average.
+  - **Cluster 2 (Olive Green):** Represents the highest risk group, with survival probability dropping sharply and significantly faster than all other groups.
 
-- **Yellow/White:** Average levels.
+- **Intermediate Groups:** Clusters 1 (Red), 3 (Green), and 5 (Pink) show moderate survival rates, with Cluster 3 appearing to have better long-term outcomes than Clusters 1 and 5
 
-**2. Cluster 1: The "High-Burden" Signature**
+  # Cluster-Specific Important Features (Heatmap)
 
-**Cluster 1** stands out immediately with a solid red row across almost all genes.
+  The heatmap on the right displays the **Normalized Importance** of the top 20 genetic and clinical variables across the five clusters.
 
-- **Interpretation:** This cluster (your largest and best-surviving group) paradoxically has the highest frequency of genomic alterations across the board, including **TMB (Tumor Mutational Burden)** and **CNA burden**.
+  - **Universal Drivers:** Features like **global_cna_burden** (Copy Number Alteration) and **TP53** show relatively high importance across almost all clusters. This suggests these are core biological drivers of breast cancer progression regardless of the specific subtype.
 
-- **Clinical Insight:** In many cancers, high TMB is associated with a better response to immunotherapy, which might explain why this group has the best survival outcome despite having many mutations.
+  - **Cluster-Specific Variations:**
 
-**3. Cluster 3 and 2: The "Low-Burden" Signature**
+    - **Cluster 4 & 5:** Show a distinct importance profile for genes like **GATA3** and **ERBB2** (HER2). This implies that for patients in these higher-survival clusters, these specific pathways are key predictors.
 
-These rows are predominantly blue/cool-toned.
+    - **Cluster 3:** Shows unique importance in **NF1** and **TMB_NONSYNONYMOUS** (Tumor Mutational Burden).
 
-- **Interpretation:** These clusters have significantly *fewer* mutations in the listed genes compared to Cluster 1.
-
-- **Clinical Insight:** **Cluster 2** was your **highest-risk (lowest survival)** group. The fact that it is "blue" here suggests that its poor prognosis is likely driven by a few specific, aggressive drivers rather than a high overall mutational load.
-
-**4. Key Gene Markers (The X-Axis)**
-
-The genes on the bottom are grouped by the top dendrogram (the "tree" lines):
-
-- **Druggable Targets:** Look at genes like **EGFR, KRAS, and ERBB2 (HER2)** on the far left. Cluster 4 (yellow/orange) shows higher-than-average levels for some of these, suggesting it might be the "targetable" group.
-
-- **Chromatin Remodelers:** Genes like **ARID1A, KMT2D, and KMT2A** are grouped in the middle.
-
-- **Specific Drivers:** On the far right, you see **B2M, PIK3CA, and BRCA2**. Cluster 5 shows some slight elevation in these, which correlates with your earlier finding that Cluster 5 is enriched for **Prostate/Breast** cancers.
-
-**5. Summary for your Results Section:**
-
-> "To characterize the molecular drivers of each subgroup, we performed hierarchical clustering of genomic alterations across the five clusters. **Cluster 1** exhibited a distinct 'hyper-mutated' phenotype, characterized by high TMB and global CNA burden. In contrast, the high-risk **Cluster 2** demonstrated a relatively low global mutational burden, suggesting its poor prognosis may be mediated by specific oncogenic drivers rather than overall genomic instability."
-
-```{r}
-library(ggplot2)
-mds <- cmdscale(dist_obj1, k = 2)
-
-plot_df <- data.frame(
-  Dim1 = mds[,1],
-  Dim2 = mds[,2],
-  Cluster = as.factor(genomic_features$cluster)
-)
-
-ggplot(plot_df, aes(x = Dim1, y = Dim2, color = Cluster)) +
-  geom_point(size = 2.5, alpha = 0.8) +
-  
-  
-  
-  labs(
-    title = "Dimensional Visualization of RSF Proximity Clusters",
-    x = "Dimension 1",
-    y = "Dimension 2",
-    color = "Cluster"
-  ) +
-  
-  theme_minimal(base_size = 14) +
-  
-  theme(
-    plot.title = element_text(hjust = 0.5, face = "bold"),
-    legend.position = "right"
-  )
-```
+    - **Missing Data/Low Relevance:** The white blocks (e.g., NCOR1 in Cluster 4 or TMB in Cluster 4) suggest these features had negligible or no predictive power for those specific subgroups.
 
 # References
 
@@ -1300,165 +1254,3 @@ ggplot(plot_df, aes(x = Dim1, y = Dim2, color = Cluster)) +
 3.  Gu et al. (2020) Gu, Y., Ji, Y., Jiang, H., & Qiu, G. (2020). Clinical effect of driver mutations of KRAS, CDKN2A/P16, TP53, and SMAD4 in pancreatic cancer: A meta-analysis. Genetic Testing and Molecular Biomarkers, 24(12), 777–788. https://doi.org/10.1089/gtmb.2020.0086
 
 4.  (Mechanistic Support) Nature Communications study (2021) Zhang, X., Li, C., Wang, L., Ren, M., Yang, Z., Xu, Y., … & Wang, J. (2021). Loss of Smad4 promotes aggressive lung cancer metastasis in KRAS/p53 mutant mice. Nature Communications, 12, 4576. https://doi.org/10.1038/s41467-021-24898-9
-
-# Methods
-
-### shorter:
-
-We trained a Random Survival Forest (RSF) using patient-level genomic features—including nonsynonymous mutations, structural variant counts, and global copy number alteration burden—as predictors, with time-to-metastasis and event status as the outcome. The forest was grown with 1,000 trees, and out-of-bag (OOB) samples were used to obtain unbiased error estimates and to compute a patient-level proximity matrix reflecting survival-relevant similarity. The proximity matrix was converted to a distance matrix and used for hierarchical clustering, with the optimal number of clusters determined by silhouette width and stability analysis. Resulting clusters were interpreted as genomic phenotypes informed by shared survival-associated patterns.
-
-## Methods
-
-### Patient Cohort and Data Preprocessing
-
-Clinical and genomic data for patients were obtained from the MSK CHORD cohort. Patients with metastasis at or prior to the time of sequencing were excluded to ensure analysis of post-sequencing outcomes. Clinical covariates including age, sex, race, and smoking status were retained for descriptive purposes but not included in the genomic clustering model. Genomic features included nonsynonymous somatic mutations (top 20 most frequently mutated genes), global copy number alteration (CNA) burden, and structural variant counts. For patients with multiple tumor samples, features were aggregated at the patient level, and missing values were imputed as zero.
-
-### Random Survival Forest Model
-
-A Random Survival Forest (RSF) was trained using the `randomForestSRC` R package. Time-to-metastasis and event status were specified as the outcome, and patient-level genomic features were used as predictors. The forest was grown with 1,000 trees to ensure model stability. Out-of-bag (OOB) samples, which are the patients excluded from each bootstrap sample used to grow individual trees, were leveraged to provide unbiased estimates of prediction error and to calculate a patient-level proximity matrix. The proximity matrix captures survival-relevant similarity between patients, based on how frequently pairs of patients co-occur in the same terminal nodes across trees.
-
-### Patient Clustering
-
-The OOB-based RSF proximity matrix was transformed into a dissimilarity (distance) matrix by subtracting the proximity values from 1. This distance matrix was used as input for hierarchical clustering with complete linkage. The optimal number of clusters was determined using silhouette width and cluster stability analysis via resampling. Resulting clusters were interpreted as **genomic phenotypes informed by survival structure**, reflecting shared survival-relevant genomic patterns among patients.
-
-### Statistical Analyses
-
-OOB error rates from the RSF were monitored to ensure sufficient forest size and stability. Cluster-specific survival curves were estimated using Kaplan-Meier analysis, and differences between clusters were assessed using the log-rank test. All analyses were conducted in R (version X.X) using the `dplyr`, `tidyr`, and `randomForestSRC` packages.
-
-### Interpretation:
-
-- Extremely large chi-square statistic p-value essentially 0 Strong evidence that survival differs across clusters RSF-derived clusters are **survival-informative**.
-
-```{r}
-gene_panel <- read.table("msk_chord_2024_data/data_gene_panel_matrix.txt", 
-                   header = TRUE, 
-                   sep = "\t", 
-                   stringsAsFactors = FALSE)
-#View(gene_panel)
-names(gene_panel)
-library(jsonlite)
-impact341 <- fromJSON("https://www.cbioportal.org/api/gene-panels/IMPACT341")$genes$hugoGeneSymbol
-impact410 <- fromJSON("https://www.cbioportal.org/api/gene-panels/IMPACT410")$genes$hugoGeneSymbol
-impact468 <- fromJSON("https://www.cbioportal.org/api/gene-panels/IMPACT468")$genes$hugoGeneSymbol
-impact505 <- fromJSON("https://www.cbioportal.org/api/gene-panels/IMPACT505")$genes$hugoGeneSymbol
-
-# Create a lookup list if you want
-panel_genes <- list(
-  IMPACT341 = impact341,
-  IMPACT410 = impact410,
-  IMPACT468 = impact468,
-  IMPACT505 = impact505
-)
-panel_genes
-```
-
-```{r}
-TumorSites <- read.delim("msk_chord_2024_data/data_timeline_tumor_sites.txt")
-View(TumorSites)
-head(TumorSites)
-names(TumorSites)
-TumorSites[TumorSites$PATIENT_ID == "P-0000012",]
-TumorSites[TumorSites$PATIENT_ID == "P-0000825",]
-TumorSites[TumorSites$PATIENT_ID == "P-0002880",]
-unique(TumorSites$TUMOR_SITE)
-
-
-clinical_sample[clinical_sample$PATIENT_ID == "P-0000012",]
-clinical_sample[clinical_sample$PATIENT_ID == "P-0000825",]
-clinical_sample[clinical_sample$PATIENT_ID == "P-0002880",]
-
-
-baseline_diag <- TumorSites %>%
-  filter(START_DATE <= 0) %>%
-  group_by(PATIENT_ID) %>%
-  slice_max(START_DATE, with_ties = FALSE) %>% # selects the diagnosis stage closest to the time of sequencing
-  select(PATIENT_ID, baseline_diag_date = START_DATE)
-
-sample_patient_map <- clinical_sample %>%
-  select(SAMPLE_ID, PATIENT_ID,TMB_NONSYNONYMOUS )
-
-sample_diag <- sample_patient_map %>%
-  left_join(baseline_diag, by = "PATIENT_ID")
-  
-```
-
-```{r}
-treatment <- read.delim("msk_chord_2024_data/data_timeline_treatment.txt")
-#View(treatment)
-head(treatment)
-names(treatment)
-```
-
-```{r}
-radiation <- read.delim("msk_chord_2024_data/data_timeline_radiation.txt")
-#View(radiation)
-head(radiation)
-names(radiation)
-```
-
-```{r}
-surgery <- read.delim("msk_chord_2024_data/data_timeline_surgery.txt")
-head(surgery)
-names(surgery)
-```
-
-```{r}
-prior_meds<- read.delim("msk_chord_2024_data/data_timeline_prior_meds.txt")
-#View(prior_meds)
-head(prior_meds)
-names(prior_meds)
-```
-
-```{r}
-psa <- read.delim("msk_chord_2024_data/data_timeline_psa_labs.txt")
-#View(psa)
-head(psa)
-names(psa)
-```
-
-```{r}
-
-
-names(clinical_patient)
-#str(clinical_patient)
-names (clinical_sample)
-#str(clinical_sample)
-names(timeline_diag)
-#str(timeline_diag)
-names(cna_seg)
-
-names(mutations)
-names(sv)
-names(gene_panel)
-names(timeline_progress)
-names(TumorSites)
-names(treatment)
-names(radiation)
-names(surgery)
-names(prior_meds)
-names(psa)
-
-
-str(clinical_patient)
-str(clinical_sample)
-str(timeline_diag)
-str(cna_seg)
-str(mutations)
-str(sv)
-str(gene_panel)
-str(timeline_progress)
-str(TumorSites)
-str(treatment)
-str(radiation)
-str(surgery)
-str(prior_meds)
-str(psa)
-
-```
-
-Project 2
-
-```{r}
-
-
-```
