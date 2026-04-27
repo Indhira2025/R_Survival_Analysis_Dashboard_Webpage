@@ -781,7 +781,7 @@ final_plot <- wrap_elements(full = heat$gtable) | km_plot$plot +
 #final_plot
 
 
-#ggsave("genomic_cluster_plot.png",final_plot,width = 14,height = 10,dpi = 300)
+ggsave("images/genomic_cluster_plot.png",final_plot,width = 14,height = 10,dpi = 300)
 ```
 
 Log-rank testing revealed highly significant differences in metastasis-free survival across the five cohorts ($p< 0.0001$).
@@ -882,7 +882,7 @@ coxplot <- ggplot(cox_df, aes(x = estimate, y = term)) +
     axis.text.y = element_text(size = 15)
   )
 coxplot
-#ggsave("coxHR_plot.png",coxplot,width = 10,height = 10,dpi = 300)
+ggsave("images/coxHR_plot.png",coxplot,width = 10,height = 10,dpi = 300)
 ```
 
 ### Multivariate Cox Regression Analysis
@@ -931,7 +931,7 @@ print(std_residuals)
 
 
 # Use the residuals from your chi-test
-#png("cluster_plot.png", width = 3000, height = 3000, res = 300)
+png("images/cluster_plot.png", width = 3000, height = 3000, res = 300)
 
 corrplot(std_residuals, 
          is.cor = FALSE, 
@@ -947,7 +947,7 @@ title("Cluster vs Cancer Type (Standardized Residuals)",
       cex.main = 1.5,   # 👈 increase size
       font.main = 2)    # bold
 
-#dev.off()
+dev.off()
 ```
 
 > This plot shows the association between molecular **clusters (rows)** and **cancer types (columns)** using **standardized residuals from a chi-square test of independence**. Each circle represents how much a specific cluster–cancer type pair deviates from what would be expected if there were no relationship; larger and darker circles indicate stronger deviations.
@@ -1190,7 +1190,7 @@ final_plot_breastcancer <-
     theme = theme(plot.title = element_text(size = 20, face = "bold"))
   )
 final_plot_breastcancer
-ggsave("breast_cluster_plot.png",final_plot_breastcancer,width = 14, height = 10,dpi = 300)
+ggsave("images/breast_cluster_plot.png",final_plot_breastcancer,width = 14, height = 10,dpi = 300)
 ```
 
 # Conclusion
